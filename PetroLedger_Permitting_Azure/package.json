@@ -1,0 +1,13 @@
+{
+  "name": "petroledger-permitting",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PetroLedger Permitting Business Model \u2014 web app with shared storage",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
