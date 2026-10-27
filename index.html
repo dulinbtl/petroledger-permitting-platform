@@ -596,6 +596,8 @@ table.cat tr.grp td{background:var(--mist);font-family:var(--display);font-weigh
 .tier-tbl tr:last-child td{border-bottom:0}
 .tier-tbl input.cell{width:100px;text-align:right}
 .tier-tbl .tier-b{margin-left:0;font-size:12px;padding:1px 8px}
+.tier-tbl .cell-sel{border:1px solid var(--rule);border-radius:4px;padding:4px 6px;font-size:12.5px;background:#fff}
+.tier-tbl tr.is-flat td{background:#FBF4E6}
 .tier-copy{display:flex;gap:8px;align-items:center;font-size:13px;margin-top:8px}
 .tier-copy input{width:auto}
 /* timeline */
@@ -761,6 +763,7 @@ function tiersFromUnit(u,units){const r=(units||{})[u]||defUnit(u);const flat=(r
 function ensureTiers(sv,units){const t=sv.tiers;
   if(!t||!Array.isArray(t.pct)||!t.pct.length){sv.tiers=tiersFromUnit(sv.unit||"Per filing",units);return sv}
   t.pct=t.pct.slice(0,MAX_TIERS).map(num);t.bp=(t.bp||[]).slice(0,t.pct.length-1).map(num);
+  if(t.flat){t.flat=t.pct.map((_,i)=>t.flat[i]==null||t.flat[i]===""?null:num(t.flat[i]));if(t.flat.every(x=>x==null))delete t.flat}
   while(t.bp.length<t.pct.length-1)t.bp.push((t.bp[t.bp.length-1]||0)+10);if(!t.unit)t.unit=sv.unit;return sv}
 function setSvcUnit(sv,u){if(sv.tiers&&sv.tiers.unit===sv.unit)sv.tiers.unit=u;sv.unit=u}
 const unitOrder=U=>{const k=Object.keys(U);return ASSET_UNITS.filter(u=>k.includes(u)).concat(k.filter(u=>!ASSET_UNITS.includes(u)).sort())};
@@ -1117,9 +1120,9 @@ const recSvcs=p=>svcList(p).filter(sv=>sv.pkg===REC);
 function autoQty(p,u){return p.lines.reduce((t,l)=>{const sv=getSvc(p,l.n);return t+(sv&&sv.unit===u?Math.max(0,num(l.qty)):0)},0)}
 function tierFor(p,sv){const t=(sv&&sv.tiers)||{unit:sv&&sv.unit,bp:[],pct:[1]},u=t.unit||sv.unit;
   const entered=unitCount(p,u),auto=autoQty(p,u),cnt=entered>0?entered:auto,bp=t.bp||[];
-  const tier=cnt>0?1+bp.filter(b=>cnt>num(b)).length:1,pc=t.pct[tier-1];
-  return {cnt,entered,auto,tier,unit:u,n:t.pct.length,pct:pc==null?1:num(pc),flat:t.pct.length<2||t.pct.every(x=>num(x)===1)}}
-const tierTxt=t=>"Tier "+t.tier+(t.pct!==1?" · "+(t.pct<1?"−":"+")+pct(Math.abs(1-t.pct)).replace(".0",""):"");
+  const tier=cnt>0?1+bp.filter(b=>cnt>num(b)).length:1,pc=t.pct[tier-1],fl=t.flat&&t.flat[tier-1]!=null?num(t.flat[tier-1]):null;
+  return {cnt,entered,auto,tier,unit:u,n:t.pct.length,pct:pc==null?1:num(pc),flatFee:fl,flat:!t.flat&&(t.pct.length<2||t.pct.every(x=>num(x)===1))}}
+const tierTxt=t=>"Tier "+t.tier+(t.flatFee!=null?" · flat fee":t.pct!==1?" · "+(t.pct<1?"−":"+")+pct(Math.abs(1-t.pct)).replace(".0",""):"");
 const recOv=(p,n)=>(p.recOv||{})[n]||{};
 const recUnits=(p,sv)=>{const o=recOv(p,sv.n);return o.units!=null&&o.units!==""?num(o.units):unitCount(p,sv.unit)};
 function pkgCount(p){return PKGS.filter(pk=>p.pkgs&&p.pkgs[pk]&&(PERFILING(pk)?p.lines.some(l=>num(l.qty)>0&&(getSvc(p,l.n)||{}).pkg===pk):recSvcs(p).some(sv=>!recOv(p,sv.n).off&&recUnits(p,sv)>0))).length}
@@ -1127,11 +1130,12 @@ function pkgRate(p){const eng=getEng(p);if(!eng.on)return 0;const n=pkgCount(p);
 // annual fee = max(minimum, times a year × units × Standard at tier × complexity, less package rate) + flat expedite
 function feeCore(sv,p,{units,level,override,exp,rate}){
   const listP=listPrice(sv,level), tq=tierFor(p,sv), isOv=override!=null&&override!=="";
-  const unitP=isOv?num(override):Math.round(listP*tq.pct*100)/100, py=perYear(sv);
-  const price=Math.round(unitP*(1-(isOv?0:rate))*100)/100, base=py*units*price, mn=units>0?minOf(sv,p):0;
+  const isFlat=tq.flatFee!=null, lvm=num(sv.lv[0].rec)>0?listP/num(sv.lv[0].rec):1;
+  const unitP=isOv?num(override):isFlat?Math.round(tq.flatFee*lvm):Math.round(listP*tq.pct*100)/100, py=perYear(sv), q=isFlat?(units>0?1:0):units;
+  const price=Math.round(unitP*(1-(isOv?0:rate))*100)/100, base=py*q*price, mn=units>0?minOf(sv,p):0;
   const expFee=exp&&units>0?num(sv.exp):0, fee=units>0?Math.max(base,mn)+expFee:0;
-  const value=units>0?Math.max(py*units*unitP,mn)+expFee:0;
-  return {listP,tq,unitP,isOv,py,price,base,mn,minApplied:units>0&&mn>base,expFee,fee,value,pkRate:isOv?0:rate}}
+  const value=units>0?Math.max(py*q*unitP,mn)+expFee:0;
+  return {listP,tq,unitP,isOv,py,price,base,mn,minApplied:units>0&&mn>base,expFee,fee,value,pkRate:isOv?0:rate,isFlat}}
 function calcLine(l,p){
   const s=getSvc(p,l.n); const disc=num(p.prop.discount)/100;
   const pk=s.pkg&&PERFILING(s.pkg)&&p.pkgs&&p.pkgs[s.pkg]?s.pkg:"";
@@ -1285,7 +1289,7 @@ function renderPkgs(p){
       <td class="r"><input class="cell ${o.units!=null&&o.units!==""?"edited":""}" type="number" min="0" step="any" data-ru="${n}" value="${esc(o.units??"")}" placeholder="${fmtNum(i.linked)}" aria-label="Units"><small>${esc(unitWord(i.s.unit,i.units))}</small></td>
       <td class="r">× ${i.py}</td>
       <td><select class="cell-sel" data-rl="${n}" aria-label="Complexity">${LEVELS.map(v=>`<option ${i.level===v?"selected":""}>${v}</option>`).join("")}</select></td>
-      <td class="r"><input class="cell ${o.price!=null&&o.price!==""?"edited":""}" type="number" min="0" step="any" data-rp="${n}" value="${esc(o.price??"")}" placeholder="${fmtNum(i.price)}" aria-label="Price per unit"><small>per ${esc(unitWord(i.s.unit,1))}</small></td>
+      <td class="r"><input class="cell ${o.price!=null&&o.price!==""?"edited":""}" type="number" min="0" step="any" data-rp="${n}" value="${esc(o.price??"")}" placeholder="${fmtNum(i.price)}" aria-label="${i.isFlat?"Flat fee":"Price per unit"}"><small>${i.isFlat?"flat fee, tier "+i.tq.tier:"per "+esc(unitWord(i.s.unit,1))}</small></td>
       <td class="r"><strong>${money(i.fee)}</strong>${i.inc&&i.minApplied?"<small>minimum</small>":""}</td>
       <td class="r">${i.fee?money(i.fee/12):"—"}</td>
       <td>${i.edited?`<button class="icon-btn reset" data-rr="${n}" title="Reset" aria-label="Reset">↺</button>`:""}</td></tr>`}).join("")}
@@ -1337,13 +1341,13 @@ function renderLines(p,keepFocus){
 }
 function unitInfo(l,c){const s=c.s,pk=s.pkg;return `${esc(s.unit)} · min ${money(c.mn||minOf(s))}${c.tq&&c.tq.tier>1&&!c.tq.flat?` · <span class="tier-b t${c.tq.tier}">${esc(tierTxt(c.tq))}</span>`:""}${!pk?" · à la carte":" · also in the "+esc(PKG_NAME)}`}
 function puHTML(l,c){const ov=c.isOv;const parts=[];if(!ov&&c.tq.pct!==1)parts.push("T"+c.tq.tier);if(!ov&&c.pkRate)parts.push("−"+pct(c.pkRate).replace(".0",""));
-  return money(c.price,(c.price%1)?2:0)+`<small>per ${esc(unitWord(c.s.unit,1))}</small>`+(ov?"<small>override</small>":(parts.length?`<small>catalog ${money(c.listP)} · ${parts.join(" ")}</small>`:""))+(c.expFee?`<small>+ ${money(c.expFee)} expedite</small>`:"")}
+  return money(c.price,(c.price%1)?2:0)+`<small>${c.isFlat?"flat fee for tier "+c.tq.tier:"per "+esc(unitWord(c.s.unit,1))}</small>`+(ov?"<small>override</small>":(parts.length?`<small>catalog ${money(c.listP)} · ${parts.join(" ")}</small>`:""))+(c.expFee?`<small>+ ${money(c.expFee)} expedite</small>`:"")}
 function detailHTML(l,c,p){const s=c.s;
   return `<div class="line-detail"><div>
     <p class="k">Scope at ${esc(l.level)}</p><p>${esc(scopeFor(s,l.level))}</p>
     <p class="k" style="margin-top:10px">What the form is for</p><p>${esc(s.desc)}</p>
     <div class="levels">${s.lv.map((v,i)=>`<div class="${LEVELS[i]===l.level?"sel":""}"><b>${LEVELS[i]}</b>${money(v.lo)}–${money(v.hi)}${i===s.lv.length-1?"+":""}<br>Rec. ${money(v.rec)}</div>`).join("")}</div>
-    <p class="note" style="margin-top:6px">Annual fee = units × ${c.py} a year (${esc(s.freq||"")}) × the ${esc(l.level)} price${c.tq.pct!==1?" at "+esc(tierTxt(c.tq))+" (tiered on "+esc(String(UNITS(p)[c.tq.unit]?.count||c.tq.unit).toLowerCase())+")":""} — at least ${money(minOf(s))} (the greater of the ${money(minFee())} minimum or the Standard price) — plus a flat ${num(s.exp)?money(s.exp):"expedite fee"} if expedited. Ranges are estimates — validate with competitor quotes.</p>
+    <p class="note" style="margin-top:6px">${c.isFlat?`Tier ${c.tq.tier} is a flat fee: annual fee = ${c.py} a year × the flat ${esc(l.level)} fee of ${money(c.unitP)}, whatever the number of units in the tier. `:""}Annual fee = units × ${c.py} a year (${esc(s.freq||"")}) × the ${esc(l.level)} price${c.tq.pct!==1?" at "+esc(tierTxt(c.tq))+" (tiered on "+esc(String(UNITS(p)[c.tq.unit]?.count||c.tq.unit).toLowerCase())+")":""} — at least ${money(minOf(s))} (the greater of the ${money(minFee())} minimum or the Standard price) — plus a flat ${num(s.exp)?money(s.exp):"expedite fee"} if expedited. Ranges are estimates — validate with competitor quotes.</p>
   </div><div>
     <div class="grid g2">
       <div class="field"><label>Fee override per unit</label><input data-f="override" type="number" min="0" step="any" value="${esc(l.override??"")}" placeholder="${money(listPrice(s,l.level))}"></div>
@@ -1439,7 +1443,7 @@ function renderDoc(p){
   const pk=t.K.filter(k=>k.on&&k.annual>0&&!k.perFiling), lines=t.L.filter(x=>num(x.l.qty)>0);
   const scopeTbl=(L,foot,fh="Annual fee")=>`<table><thead><tr><th>Service</th><th>Complexity</th><th class="r">Units × a year</th><th class="r">Price per unit</th><th class="r">${fh}</th></tr></thead><tbody>
      ${L.map(({l,c})=>`<tr><td><strong>${esc(c.s.name)}</strong><div class="scope">${esc(scopeFor(c.s,l.level))}.${c.minApplied?" Minimum annual fee of "+money(c.mn)+" applies.":""}</div></td>
-      <td>${esc(l.level)}${c.expFee?'<div class="note" style="color:#B5452F;font-weight:600">Expedited +'+money(c.expFee*(1-disc))+'</div>':""}</td><td class="r">${esc(fmtNum(l.qty))} <span class="note">${esc(unitWord(c.s.unit,l.qty))}</span> × ${c.py}</td><td class="r">${money(c.price*(1-disc),(c.price%1)?2:0)}</td><td class="r">${money(c.fee*(1-disc))}</td></tr>`).join("")}
+      <td>${esc(l.level)}${c.expFee?'<div class="note" style="color:#B5452F;font-weight:600">Expedited +'+money(c.expFee*(1-disc))+'</div>':""}</td><td class="r">${esc(fmtNum(l.qty))} <span class="note">${esc(unitWord(c.s.unit,l.qty))}</span> × ${c.py}</td><td class="r">${money(c.price*(1-disc),(c.price%1)?2:0)}${c.isFlat?`<div class="note">flat fee, tier ${c.tq.tier}</div>`:""}</td><td class="r">${money(c.fee*(1-disc))}</td></tr>`).join("")}
      ${foot}</tbody></table>`;
   const alcLines=t.alcL.filter(x=>num(x.l.qty)>0);
 
@@ -1474,7 +1478,7 @@ function renderDoc(p){
    ${alcLines.length?H("Priority work — à la carte permits, filings and projects")+`<p>Work to start right away on acceptance, billed ${t.split?"50% upfront and 50% on completion":"100% upfront"}.</p>`+scopeTbl(alcLines,`<tr class="sum"><td colspan="4">À la carte — billed ${t.split?"50% upfront and 50% on completion":"100% upfront"}</td><td class="r">${money(t.svcFees*(1-disc))}</td></tr>`,"Fee")+`<p class="note" style="margin-top:8px">Units are estimates. Each service is subject to its minimum annual fee. Expedited handling is available on à la carte services for a flat fee per service.</p>`:""}
    ${pk.length?H(esc(PKG_NAME))+`<p>A fixed annual fee billed monthly, covering every recurring RRC filing listed. Each filing is priced on the operator's units × the times it is filed a year; RRC state fees are billed separately.</p>`+
      pk.map(k=>`<div class="pk"><header><strong>${esc(PKN(k.pk))}</strong><span>${money(k.annual*(1-disc))} per year · ${money(k.annual*(1-disc)/12)} per month</span></header>
-       <table style="margin-top:8px"><tbody>${k.items.filter(i=>i.fee>0).map(i=>`<tr><td>${esc(i.s.name)}${i.expFee?'<div class="note" style="color:#B5452F;font-weight:600">Expedited</div>':""}</td><td class="r">${fmtNum(i.units)} ${esc(unitWord(i.s.unit,i.units))} × ${i.py} a year<div class="note">${esc(i.s.freq||"")}</div></td><td class="r">${money(i.fee*(1-disc))}</td></tr>`).join("")}</tbody></table>
+       <table style="margin-top:8px"><tbody>${k.items.filter(i=>i.fee>0).map(i=>`<tr><td>${esc(i.s.name)}${i.expFee?'<div class="note" style="color:#B5452F;font-weight:600">Expedited</div>':""}</td><td class="r">${fmtNum(i.units)} ${esc(unitWord(i.s.unit,i.units))} × ${i.py} a year<div class="note">${esc(i.s.freq||"")}${i.isFlat?` · flat fee, tier ${i.tq.tier}`:""}</div></td><td class="r">${money(i.fee*(1-disc))}</td></tr>`).join("")}</tbody></table>
        ${k.value>k.annual?`<p style="margin:8px 0 0;font-size:13px"><strong>${pct(1-k.annual/k.value).replace(".0","")} below</strong> the price of the same filings one at a time (${money(k.value*(1-disc))} a year).</p>`:""}
        <p class="note" style="margin:6px 0 0">Based on ${unitOrder(UNITS(p)).filter(u=>unitCount(p,u)>0&&u!=="Per operator"&&k.items.some(i=>i.fee>0&&i.s.unit===u)).map(u=>fmtNum(unitCount(p,u))+" "+esc((UNITS(p)[u].count||u).toLowerCase())).join(", ")}. Includes deadline monitoring and RRC Online / LoneSTAR administration.</p></div>`).join(""):""}
    ${H("Assumptions, exclusions and client responsibilities")}
@@ -1594,10 +1598,10 @@ function editService(n){
        <div class="field span2"><label>Tier on the client's count of</label><select data-k="tunit">${unitOrder(CAT.units).concat(s.tiers&&s.tiers.unit&&!CAT.units[s.tiers.unit]?[s.tiers.unit]:[]).map(u=>`<option value="${esc(u)}" ${u===(s.tiers&&s.tiers.unit)?"selected":""}>${esc(CAT.units[u]?.count||u)} (${esc(u.toLowerCase())})</option>`).join("")}</select></div>
        <div class="field"><label>Number of tiers</label><select data-k="tn">${[1,2,3,4,5].map(k=>`<option value="${k}" ${k===(s.tiers?s.tiers.pct.length:1)?"selected":""}>${k===1?"1 — no volume pricing":k}</option>`).join("")}</select></div>
       </div>
-      <div class="table-wrap"><table class="tier-tbl"><thead><tr><th>Tier</th><th class="r">From</th><th class="r">To</th><th class="r">% of Standard</th><th class="r">Standard price</th><th class="r">Complex price</th></tr></thead><tbody id="tierRows"></tbody></table></div>
+      <div class="table-wrap"><table class="tier-tbl"><thead><tr><th>Tier</th><th class="r">From</th><th class="r">To</th><th>Priced</th><th class="r">% of Standard</th><th class="r">Standard price</th><th class="r">Complex price</th></tr></thead><tbody id="tierRows"></tbody></table></div>
       <p class="note err" id="tierErr" style="color:var(--warn);margin:6px 0 0"></p>
       <label class="tier-copy"><input type="checkbox" data-k="tcopy"> <span id="tcTxt"></span></label>
-      <p class="note" style="margin:6px 0 0">Every unit on a proposal is priced at the tier the client's count falls in. Tier 1 is the Standard price; Complex follows its multiple. Prices are per unit, before the engagement discount and the minimum.</p>
+      <p class="note" style="margin:6px 0 0">The client's count of the unit picks the tier. <b>Per unit</b>: every unit is charged the tier's price (Tier 1 is the Standard price). <b>Flat fee for the tier</b>: one fee covers all the units in that tier. Complex follows the filing's multiple. Prices are before the engagement discount and the minimum.</p>
      </section>
      <section class="ed-sec s-pkg"><h4>Package</h4>
       <div class="grid g4">
@@ -1631,29 +1635,33 @@ function editService(n){
   const pkUpd=()=>{dlg.querySelector(".s-pkg").classList.toggle("on",!!pkSel.value)};
   pkSel.addEventListener("change",pkUpd);pkUpd();
   dlg.querySelector('[data-k="freq"]').addEventListener("change",e=>{const w=pkgForFreq(e.target.value);if(pkSel.value&&!w){pkSel.value="";pkUpd()}});
-  const T=clone(s.tiers||{unit:s.unit,bp:[],pct:[1]});T.pct[0]=1;
+  const T=clone(s.tiers||{unit:s.unit,bp:[],pct:[1]});T.pct[0]=1;T.flat=T.pct.map((_,i)=>T.flat&&T.flat[i]!=null?num(T.flat[i]):null);
+  const isF=i=>T.flat[i]!=null, topOf=i=>i<T.bp.length?num(T.bp[i]):(i?num(T.bp[i-1])+1:1);
   const tU=dlg.querySelector('[data-k="tunit"]'),tN=dlg.querySelector('[data-k="tn"]'),tBody=dlg.querySelector("#tierRows");
   const cxv=()=>num(F(1,"rec")?F(1,"rec").value:(s.lv[1]||{}).rec), stdv=()=>num(F(0,"rec").value);
-  const tierBad=()=>{for(let i=0;i<T.bp.length;i++){if(num(T.bp[i])<1||(i&&num(T.bp[i])<=num(T.bp[i-1])))return "Each tier's “To” must be at least 1 and higher than the tier before it."}return T.pct.some(x=>num(x)<=0)?"Every tier needs a price above zero.":""};
+  const tierBad=()=>{for(let i=0;i<T.bp.length;i++){if(num(T.bp[i])<1||(i&&num(T.bp[i])<=num(T.bp[i-1])))return "Each tier's “To” must be at least 1 and higher than the tier before it."}return T.pct.some((x,i)=>isF(i)?num(T.flat[i])<=0:num(x)<=0)?"Every tier needs a price above zero.":""};
   const tierCalc=()=>{const st=stdv(),cx=cxv();tBody.querySelectorAll("tr").forEach((tr,i)=>{tr.querySelector(".tf").textContent=i===0?"1":fmtNum(num(T.bp[i-1])+1);
       const sp=tr.querySelector("[data-tp]");if(sp&&document.activeElement!==sp)sp.value=r2(st*num(T.pct[i]));
-      const cp=Math.round(cx*num(T.pct[i])*100)/100;tr.querySelector(".tcx").textContent=money(cp,cp%1?2:0)});
+      const cp=isF(i)?Math.round(num(T.flat[i])*(st>0?cx/st:1)):Math.round(cx*num(T.pct[i])*100)/100;tr.querySelector(".tcx").innerHTML=money(cp,cp%1?2:0)+(isF(i)?` <span class="note">flat</span>`:"")});
     dlg.querySelectorAll("[data-std2]").forEach(x=>{if(document.activeElement!==x)x.value=st||""});const mn=dlg.querySelector("#edMin");if(mn)mn.textContent=money(Math.max(minFee(),st));
     const e=tierBad();dlg.querySelector("#tierErr").textContent=e;
     const others=CAT.services.filter(x=>x.n!==s.n&&x.tiers&&x.tiers.unit===tU.value).length;
     dlg.querySelector(".tier-copy").style.display=others?"":"none";dlg.querySelector("#tcTxt").textContent=`Also use these tiers for the other ${others} filing${others===1?"":"s"} tiered on ${String(CAT.units[tU.value]?.count||tU.value).toLowerCase()}`};
   const tierRows=()=>{const n=T.pct.length,unitW=String(CAT.units[tU.value]?.count||tU.value).toLowerCase();
-    tBody.innerHTML=T.pct.map((x,i)=>`<tr class="tr${i+1}"><td><span class="tier-b t${i+1}">Tier ${i+1}</span></td><td class="r tf"></td>
+    tBody.innerHTML=T.pct.map((x,i)=>`<tr class="tr${i+1} ${isF(i)?"is-flat":""}"><td><span class="tier-b t${i+1}">Tier ${i+1}</span></td><td class="r tf"></td>
       <td class="r">${i<n-1?`<input class="cell" type="number" min="1" step="1" data-tb="${i}" value="${esc(T.bp[i])}" aria-label="Tier ${i+1} up to">`:`<span class="note">and up</span>`}</td>
-      <td class="r">${i===0?`<span class="note">100%</span>`:`<input class="cell" type="number" min="0" step="any" data-tpc="${i}" value="${Math.round(num(x)*1000)/10}" aria-label="Tier ${i+1} percent of Standard">`}</td>
-      <td class="r">${i===0?`<input class="cell" type="number" min="0" step="any" data-std2 aria-label="Tier 1 Standard price">`:`<input class="cell" type="number" min="0" step="any" data-tp="${i}" aria-label="Tier ${i+1} Standard price">`}</td>
-      <td class="r tcx"></td></tr>`).join("")+(n===1?`<tr><td colspan="6" class="note">One tier: every client pays the Standard price per ${esc(unitWord(tU.value,1)||"unit")}, whatever their count of ${esc(unitW)}.</td></tr>`:"");
+      <td><select class="cell-sel" data-tbs="${i}" aria-label="Tier ${i+1} priced"><option value="unit" ${isF(i)?"":"selected"}>Per unit</option><option value="flat" ${isF(i)?"selected":""}>Flat fee for the tier</option></select></td>
+      <td class="r">${isF(i)?`<span class="note">—</span>`:i===0?`<span class="note">100%</span>`:`<input class="cell" type="number" min="0" step="any" data-tpc="${i}" value="${Math.round(num(x)*1000)/10}" aria-label="Tier ${i+1} percent of Standard">`}</td>
+      <td class="r">${isF(i)?`<input class="cell" type="number" min="0" step="any" data-tflat="${i}" value="${esc(T.flat[i])}" aria-label="Tier ${i+1} flat fee">`:i===0?`<input class="cell" type="number" min="0" step="any" data-std2 aria-label="Tier 1 Standard price">`:`<input class="cell" type="number" min="0" step="any" data-tp="${i}" aria-label="Tier ${i+1} Standard price">`}</td>
+      <td class="r tcx"></td></tr>`).join("")+(n===1?`<tr><td colspan="7" class="note">One tier: every client pays ${isF(0)?"the flat fee":"the Standard price per "+esc(unitWord(tU.value,1)||"unit")}, whatever their count of ${esc(unitW)}.</td></tr>`:"");
     tBody.querySelectorAll("[data-tb]").forEach(el=>el.addEventListener("input",()=>{T.bp[+el.dataset.tb]=Math.round(num(el.value));tierCalc()}));
+    tBody.querySelectorAll("[data-tbs]").forEach(el=>el.addEventListener("change",()=>{const i=+el.dataset.tbs;T.flat[i]=el.value==="flat"?rnd(stdv()*num(T.pct[i])*Math.max(1,topOf(i))):null;tierRows()}));
+    tBody.querySelectorAll("[data-tflat]").forEach(el=>el.addEventListener("input",()=>{T.flat[+el.dataset.tflat]=num(el.value);tierCalc()}));
     tBody.querySelectorAll("[data-tpc]").forEach(el=>el.addEventListener("input",()=>{T.pct[+el.dataset.tpc]=num(el.value)/100;tierCalc()}));
     tBody.querySelectorAll("[data-tp]").forEach(el=>el.addEventListener("input",()=>{const st=stdv(),i=+el.dataset.tp;if(st>0){T.pct[i]=num(el.value)/st;const pc=tBody.querySelector(`[data-tpc="${i}"]`);if(pc)pc.value=Math.round(T.pct[i]*1000)/10}tierCalc()}));
     tierCalc()};
-  tN.addEventListener("change",()=>{const n=+tN.value;while(T.pct.length<n){const k=T.pct.length;T.pct.push(r2(Math.max(0.05,num(T.pct[k-1])-0.05)));T.bp.push(k>1?Math.round(num(T.bp[k-2])*2.5)||10:(tiersFromUnit(tU.value,CAT.units).bp[0]||10))}
-    T.pct=T.pct.slice(0,n);T.bp=T.bp.slice(0,n-1);tierRows()});
+  tN.addEventListener("change",()=>{const n=+tN.value;while(T.pct.length<n){const k=T.pct.length;T.pct.push(r2(Math.max(0.05,num(T.pct[k-1])-0.05)));T.flat.push(null);T.bp.push(k>1?Math.round(num(T.bp[k-2])*2.5)||10:(tiersFromUnit(tU.value,CAT.units).bp[0]||10))}
+    T.pct=T.pct.slice(0,n);T.flat=T.flat.slice(0,n);T.bp=T.bp.slice(0,n-1);tierRows()});
   tU.addEventListener("change",()=>{T.unit=tU.value;tierRows()});
   const tierPrev=()=>tierCalc();
   tierRows();
@@ -1680,7 +1688,8 @@ function editService(n){
         fee:num(F(0,"rec").value),mult:s.lv.map((_,j)=>j===0?1:r2(F(j,"mult").value)),exp:num(get("exp")),state:num(get("state")),rs:Math.min(1,Math.max(0,num(get("rs"))/100)),prep:get("prep"),rev:get("rev"),
         lv:s.lv.map((x,i)=>({scope:dlg.querySelector(`[data-lv="${i}"][data-lk="scope"]`).value,lo:num(dlg.querySelector(`[data-lv="${i}"][data-lk="lo"]`).value),hi:num(dlg.querySelector(`[data-lv="${i}"][data-lk="hi"]`).value),rec:num(dlg.querySelector(`[data-lv="${i}"][data-lk="rec"]`).value)}))};
       const pc=get("pkgcomp");delete out.pkg;if(pc)out.pkg=pc;
-      const tiers={unit:T.unit||out.unit,bp:T.bp.map(x=>Math.round(num(x))),pct:T.pct.map((x,i)=>i===0?1:Math.round(num(x)*10000)/10000)};out.tiers=tiers;
+      const tiers={unit:T.unit||out.unit,bp:T.bp.map(x=>Math.round(num(x))),pct:T.pct.map((x,i)=>i===0?1:Math.round(num(x)*10000)/10000)};
+      if(T.flat.some(x=>x!=null))tiers.flat=T.flat.map(x=>x==null?null:r2(x));out.tiers=tiers;
       if(dlg.querySelector('[data-k="tcopy"]').checked)CAT.services.forEach(x=>{if(x.n!==s.n&&x.tiers&&x.tiers.unit===tiers.unit)x.tiers=clone(tiers)});
       if(isNew)CAT.services.push(out);else{const i=CAT.services.findIndex(x=>x.n===n);CAT.services[i]=out;if(newN!==n)P.forEach(p=>{if(!p.lock)p.lines.forEach(l=>{if(l.n===n)l.n=newN})})}
       reindex();ensureUnits(CAT);syncSubs();saveCat();save();toast(isNew?"Service added":"Saved #"+newN+(check()?"":" — check the flagged ranges"));
@@ -1755,7 +1764,7 @@ function renderMethod(){
   const ex=SVC[9]||CAT.services[0], exStd=num(ex.lv[0].rec), exCx=num(ex.lv[1].rec), exQty=4, exExp=num(ex.exp);
   const p4=SVC[6], p4Std=p4?num(p4.lv[0].rec):0, p4Min=p4?minOf(p4):0;
   const M=CAT.levelMult, mult=[1,M.Complex];
-  const tex=CAT.services.find(x=>x.tiers&&x.tiers.unit==="Per well"&&x.tiers.pct.length>2&&x.pkg!==REC)||CAT.services.find(x=>x.tiers&&x.tiers.pct.length>2)||CAT.services[0], tr={...(tex.tiers||{unit:tex.unit,bp:[],pct:[1]})};tr.count=CAT.units[tr.unit]?.count||tr.unit;
+  const tex=CAT.services.find(x=>x.tiers&&!x.tiers.flat&&x.tiers.unit==="Per well"&&x.tiers.pct.length>2&&x.pkg!==REC)||CAT.services.find(x=>x.tiers&&!x.tiers.flat&&x.tiers.pct.length>2)||CAT.services[0], tr={...(tex.tiers||{unit:tex.unit,bp:[],pct:[1]})};tr.count=CAT.units[tr.unit]?.count||tr.unit;
   const units={};CAT.services.forEach(s=>{const u=String(s.unit).replace(/\/.*$/,"");units[u]=(units[u]||0)+1});
   const topUnits=Object.entries(units).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const E=S.engage;
@@ -1810,7 +1819,7 @@ function renderMethod(){
     <div class="m-fig">${mbar}</div></div></section>
 
    <section class="m-sec ms-pkg"><h2>Volume tiers</h2>
-    <p class="m-lede">Each filing has its own volume tiers — up to five — based on the client's count of a unit chosen for that filing, such as operated wells, leases or permits. The count sets the tier, and the filing is priced at that tier's percentage of its Standard price. Tiers are set in each filing's detail in the Service catalog.</p>
+    <p class="m-lede">Each filing has its own volume tiers — up to five — based on the client's count of a unit chosen for that filing, such as operated wells, leases or permits. The count sets the tier. Each tier is either a price per unit — a percentage of the Standard price — or one flat fee for the tier, whatever the number of units in it. Tiers are set in each filing's detail in the Service catalog.</p>
     <div class="m-fig">${stair}</div>
     <p class="m-example">#${tex.n} ${esc(tex.name)} — Standard ${money(tStd)} ${esc(tex.unit.toLowerCase())}, stepping to ${tr.pct.map(x=>Math.round(num(x)*100)+"%").join(" / ")} as ${esc((tr.count||"").toLowerCase())} pass ${tr.bp.join(", ")||"—"}.</p>
    </section>
