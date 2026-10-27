@@ -1009,6 +1009,23 @@ function migrateCat(cat){
     ASSET_UNITS.forEach(u=>{if(!cat.units[u])cat.units[u]=defUnit(u)});
     cat.v=12;
   }
+  if((cat.v||0)<13){ // merge filings that were listed more than once and priced the same
+    const by=n=>cat.services.find(x=>x.n===n), drop=ns=>{cat.services=cat.services.filter(x=>!ns.includes(x.n))};
+    const p4=by(6);
+    if(p4&&by(48)&&by(49)&&/P-4/.test(by(48).forms)&&/P-4/.test(by(49).forms)){
+      p4.name="Form P-4 – Producer's Transportation Authority and Certificate of Compliance";
+      p4.desc="Names the operator, gatherer(s) and purchaser authorized for a lease (Statewide Rule 58); product cannot be moved without a current P-4. File it for a change of operator after an acquisition, divestiture or operatorship change (both operators sign; the new operator needs an active P-5 and financial assurance and becomes responsible for plugging under Rule 14), when a new well is completed to set up the lease and designate the gatherer and purchaser (with the W-2 or G-1), or when the gatherer or purchaser on an existing lease changes.";
+      p4.lv[0].scope="Change of operator, new lease with gatherer / purchaser designation, or gatherer / purchaser change, with lease and well verification";
+      drop([48,49])}
+    const w2=by(16),g1=by(17);
+    if(w2&&g1&&/W-2/.test(w2.forms)&&/G-1/.test(g1.forms)){
+      w2.forms="W-2 or G-1, W-15, L-1, G-5";
+      w2.name="Form W-2 / G-1 – Oil or Gas Well Completion or Recompletion Report and Log (with W-15, L-1)";
+      w2.desc="Completion report for each new or recompleted well: Form W-2 for an oil well (potential test) or Form G-1 for a gas well (back-pressure test, with G-5 and the back-pressure curve where a potential test is run). Due within 30 days of completion, or 10 days (oil) / 15 days (gas) after the potential test, whichever is earlier. Filed with Form W-15 (Cementing Report), Form L-1 (Electric Log Status Report) and Form P-12 if pooled.";
+      w2.lv[0].scope="W-2 or G-1 with W-15, L-1 (and G-5 for gas) and data review";
+      drop([17])}
+    cat.v=13;
+  }
   cat.services.forEach(normalizeSvc);
   ensureUnits(cat);
   syncSubs(cat);
@@ -1062,6 +1079,7 @@ P.forEach(p=>{
     if(!LEVELS.includes(l.level))l.level="Standard"});
   p.pkgLevel=p.pkgLevel||{};Object.keys(p.pkgLevel).forEach(k=>{if(p.pkgLevel[k]==="Simple")p.pkgLevel[k]="Standard";if(p.pkgLevel[k]==="Super Complex")p.pkgLevel[k]="Complex"});
   p.pkgs=p.pkgs||{};Object.values(p.recOv||{}).forEach(o=>{if(o&&o.level)delete o.level});
+  if(!p.lock)p.lines.forEach(l=>{const to={48:6,49:6,17:16}[l.n];if(to&&!SVC[l.n]&&SVC[to])l.n=to});
   if(!p.v11){
     const DU={WELLS:"Per well",GAS_WELLS:"Per gas well",INACTIVE:"Per inactive well",CI_ASSETS:"Per critical-infrastructure asset",VEHICLES:"Per vehicle",INJ_WELLS:"Per injection / disposal well",SWD_FAC:"Per disposal facility",PLANTS:"Per gas processing plant",T_SYS:"Per transportation / storage system",PIPE_PERMITS:"Per pipeline permit",PITS:"Per pit"};
     const c0=p.counts||{},c1={};Object.entries(c0).forEach(([k,v])=>{if(DU[k]){if(num(v))c1[DU[k]]=num(v)}else if(!/^[A-Z_]+$/.test(k))c1[k]=v});p.counts=c1;
