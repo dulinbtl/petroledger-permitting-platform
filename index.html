@@ -601,6 +601,8 @@ table.cat tr.grp td{background:var(--mist);font-family:var(--display);font-weigh
 .tier-copy{display:flex;gap:8px;align-items:center;font-size:13px;margin-top:8px}
 .tier-copy input{width:auto}
 .fct-tag{display:inline-block;font-size:11px;font-weight:600;padding:0 6px;border-radius:8px;background:#E3E8EB;color:#3B4A52;margin-left:4px}.fct-tag.disc{background:#EAF3EE;color:#1F5A3C}.fct-tag.prem{background:#F3E2BE;color:#6B4E14}
+.line-name .sitsel{margin-left:10px;font-size:12.5px;max-width:340px;vertical-align:1px;border:1px solid var(--rule);border-radius:4px;padding:2px 6px;background:#fff}
+.sit-tbl tr.sit-row{cursor:pointer}.sit-tbl tr.sit-row:hover td{background:#F7F9FB}
 /* timeline */
 .tl-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}
 .tl-stat{background:#fff;border:1px solid var(--rule);border-radius:var(--r);padding:12px 16px;display:flex;flex-direction:column;gap:4px;border-top:4px solid #8FA3AD}
@@ -769,6 +771,12 @@ function ensureTiers(sv,units){const t=sv.tiers;
   t.pct=t.pct.slice(0,MAX_TIERS).map(num);t.bp=(t.bp||[]).slice(0,t.pct.length-1).map(num);
   if(t.flat){t.flat=t.pct.map((_,i)=>t.flat[i]==null||t.flat[i]===""?null:num(t.flat[i]));if(t.flat.every(x=>x==null))delete t.flat}
   while(t.bp.length<t.pct.length-1)t.bp.push((t.bp[t.bp.length-1]||0)+10);if(!t.unit)t.unit=sv.unit;return sv}
+const formLabel=sv=>!sv.forms||String(sv.forms).trim()==="—"?"No RRC form":String(sv.forms);
+function ensureForms(cat){cat.forms=cat.forms||{};const used=new Set();
+  cat.services.forEach(sv=>{if(!sv.form||!cat.forms[sv.form]){let id="g"+sv.n;while(cat.forms[id]&&!cat.services.some(x=>x!==sv&&x.form===id&&x.n===sv.n))id+="b";
+      if(!cat.forms[id])cat.forms[id]={id,label:formLabel(sv),name:sv.name,desc:"",cat:sv.cat};sv.form=id}used.add(sv.form)});
+  Object.keys(cat.forms).forEach(k=>{if(!used.has(k))delete cat.forms[k]})}
+const sitsOf=(fid,cat=CAT)=>cat.services.filter(x=>x.form===fid).sort((a,b)=>a.n-b.n);
 function setSvcUnit(sv,u){if(sv.tiers&&sv.tiers.unit===sv.unit)sv.tiers.unit=u;sv.unit=u}
 const unitOrder=U=>{const k=Object.keys(U);return ASSET_UNITS.filter(u=>k.includes(u)).concat(k.filter(u=>!ASSET_UNITS.includes(u)).sort())};
 const DERIVED_COUNTS=c=>({...c,OIL_WELLS:Math.max(0,num(c.WELLS)-num(c.GAS_WELLS))});
@@ -1026,6 +1034,24 @@ function migrateCat(cat){
       drop([17])}
     cat.v=13;
   }
+  if((cat.v||0)<14){ // one catalog card per RRC form; each way the form is filed is a "situation" with its own price
+    const G=[["P-5","Form P-5 – Organization Report","Organization report that registers the operator with the RRC — legal identity, officers (P-5O) and non-employee agents (P-5A). It must be current, and renewed every year, for any oil and gas operations, permits or filings.",{1:"New operator registration",2:"Annual renewal",3:"Delinquent renewal / reinstatement",4:"Mid-year officer, agent or address update (P-5O / P-5A)"}],
+      ["W-1","Form W-1 – Application for Permit to Drill, Recomplete, or Re-Enter","Permit to drill, deepen, recomplete or re-enter a well, filed with the location plat and, as needed, W-1H / W-1D supplements, the P-16 acreage designation, Statewide Rule 37 / 38 exception notices and offset waivers.",{8:"Vertical well",9:"Horizontal or directional well (W-1H / W-1D)",10:"Allocation or production-sharing well (P-16)",11:"Rule 37 / 38 exception (notice package)",12:"Rule 37 offset waiver letter (each)",13:"Amended or refiled permit",15:"Expedited RRC review"}],
+      ["W-2 / G-1","Form W-2 / G-1 – Oil or Gas Well Completion or Recompletion Report and Log","Completion or recompletion report and log for each new or recompleted oil well (W-2) or gas well (G-1), filed with the W-15 cementing report and L-1 log status report (and G-5 for gas wells).",{16:"Standard completion",18:"Horizontal or complex completion package"}],
+      ["W-3X","Form W-3X – Extension of Deadline for Plugging an Inactive Well","Extends the plugging deadline for an inactive well under Statewide Rule 15; filed every year with the P-5 renewal.",{20:"Annual extension",22:"Rule 15 compliance project (W-3X, W-3C, H-15 for every inactive well)"}],
+      ["EP-1","Form EP-1 – Authorized Pit Registration/Change Form","Registers or changes authorized pits under 16 TAC Chapter 4, Subchapter A, using the LoneSTAR templates. Schedule B pits also need EP-2 financial security posted with an EP-3 bond or EP-4 letter of credit.",{23:"Schedule A registration (up to 5 pits)",24:"Each additional Schedule A pit",26:"Pit closure or change",25:"Schedule B pit with financial security (EP-2, EP-3 / EP-4)"}],
+      ["EP-5","Form EP-5 – Permit Application for Surface Management of Oil & Gas Waste","Permit for surface management of oil and gas waste at commercial disposal, separation, landfarm and land-application facilities, and amendments to those permits.",{27:"Commercial surface waste disposal facility (CF-1 / CF-2)",28:"Commercial facility amendment",29:"Landfarm, landtreatment or land application",30:"Commercial waste separation facility"}],
+      ["WH-1","Form WH-1 – Application for Oil and Gas Waste Hauler's Permit","Waste-hauler permit for hauling oil and gas waste for hire, filed with the WH-2 vehicle list and WH-3 disposal authorizations; renewed every year.",{31:"Initial permit (up to 5 vehicles)",33:"Annual renewal"}],
+      ["WH-2","Form WH-2 – Oil and Gas Waste Hauler's List of Vehicles","Adds or removes vehicles on a waste-hauler permit after it is issued; each vehicle needs current registration.",{32:"Each additional vehicle",34:"Mid-year roster amendment"}],
+      ["CI-D","Form CI-D – Acknowledgment of Critical Customer/Critical Gas Supplier Designation","Acknowledges critical designation of facilities under Statewide Rule 65 in the RRC Online System, with an attachment listing each critical asset; filed in both yearly windows.",{36:"Base filing (up to 5 assets)",37:"Each additional critical asset",39:"Maintenance across both filing windows"}]];
+    cat.forms=cat.forms||{};
+    G.forEach(([label,name,desc,map])=>{const ns=Object.keys(map).map(Number).filter(n=>cat.services.some(x=>x.n===n));if(!ns.length)return;
+      const n0=Math.min(...ns),first=cat.services.find(x=>x.n===n0),id="g"+n0;cat.forms[id]={id,label,name,desc,cat:first.cat};
+      ns.forEach(n=>{const sv=cat.services.find(x=>x.n===n);sv.form=id;sv.sit=map[n];sv.cat=first.cat})});
+    Object.entries({5:"P-5PB / P-5LC",14:"P-12",19:"W-3A / W-3",35:"EP-9 / EP-10",38:"CI-X",47:"H-1",60:"T-4"}).forEach(([n,label])=>{const sv=cat.services.find(x=>x.n===+n);
+      if(sv&&!sv.form){const id="g"+n;cat.forms[id]={id,label,name:sv.name,desc:"",cat:sv.cat};sv.form=id;sv.sit=""}});
+    cat.v=14;
+  }
   cat.services.forEach(normalizeSvc);
   ensureUnits(cat);
   syncSubs(cat);
@@ -1052,7 +1078,7 @@ const withItems=cat=>{cat.services.forEach(normalizeSvc);if(!cat.levelMult)cat.l
 const baseCatalog=()=>{const c=clone({services:DATA.services,components:DATA.components,drivers:DATA.drivers});c.services.forEach(normalizeSvc);withItems(c);return migrateCat(c)};
 let CAT=null; try{CAT=JSON.parse(localStorage.getItem(LS_C))}catch(e){} if(!CAT||!CAT.services)CAT=baseCatalog(); else {CAT.services.forEach(normalizeSvc);withItems(CAT);migrateCat(CAT);withItems(CAT)}
 const onePkg=svs=>svs.forEach(sv=>{if(sv.pkg&&!PKGS.includes(sv.pkg))delete sv.pkg}); // One Time / As Needed retired: those filings are à la carte
-onePkg(CAT.services);syncSubs(CAT);CAT.services.forEach(sv=>ensureTiers(sv,CAT.units));ensureUnits(CAT);
+onePkg(CAT.services);syncSubs(CAT);CAT.services.forEach(sv=>ensureTiers(sv,CAT.units));ensureUnits(CAT);ensureForms(CAT);
 const freqOf=(it,sv)=>((sv||SVC[it.n]||{}).freq)||it.freq||((num(it.fixed)===12||num(it.per)===12)?"Monthly":(num(it.fixed)===2||num(it.per)===2)?"Semi-annual":"Annual");
 const freqCls=f=>"f-"+String(f).split(/[ ,(]/)[0].toLowerCase();
 
@@ -1340,7 +1366,7 @@ function renderLines(p,keepFocus){
   if(!p.lines.length){box.innerHTML=`<div class="empty-lines">No services yet. Search above or browse by category to add the first one.</div>`;return}
   box.innerHTML=p.lines.filter(l=>getSvc(p,l.n)).map(l=>{const c=calcLine(l,p),s=c.s;return `<div class="line lv${lvIdx(l.level)}" data-line="${l.id}">
     <div class="line-top">
-      <div class="line-name"><span class="fn">#${s.n}</span>${esc(s.name)}</div>
+      <div class="line-name"><span class="fn">#${s.n}</span>${esc(s.name)}${!p.lock&&s.form&&sitsOf(s.form).length>1?`<select class="cell-sel sitsel" data-sitsel aria-label="Situation">${sitsOf(s.form).map(x=>`<option value="${x.n}" ${x.n===s.n?"selected":""}>${esc(x.sit||x.name)}</option>`).join("")}</select>`:""}</div>
       <div class="unitinfo">${unitInfo(l,c)}</div>
       <div class="uwrap"><input data-f="qty" type="number" min="0" step="any" value="${esc(fmtNum(l.qty))}" aria-label="Units"><small class="uw">${esc(unitWord(s.unit,l.qty))}</small></div>
       <div class="amt py" title="${esc(s.freq||"")}">× ${c.py}<small>${esc(s.freq||"")}</small></div>
@@ -1357,6 +1383,7 @@ function renderLines(p,keepFocus){
       const f=el.dataset.f; l[f]=el.type==="checkbox"?el.checked:(f==="level"?el.value:(el.value===""&&f==="override"?null:el.value));
       if(f==="level"||f==="tpBilled"||f==="exp"){touch(p);renderLines(p);renderLedger(p);renderList()}else touch(p,true)}));
     row.querySelector("[data-del]").addEventListener("click",()=>{p.lines=p.lines.filter(x=>x!==l);touch(p);renderLines(p);renderLedger(p);renderList()});
+    row.querySelector("[data-sitsel]")?.addEventListener("change",e=>{l.n=+e.target.value;touch(p);renderLines(p);renderLedger(p);renderList();toast("Situation changed")});
     row.querySelector("[data-tog]").addEventListener("click",()=>{open.has(l.id)?open.delete(l.id):open.add(l.id);renderLines(p)});
   });
 }
@@ -1526,7 +1553,7 @@ let catTab="services";
 function catDirty(){return JSON.stringify(CAT)!==JSON.stringify(baseCatalog())}
 function renderCatalog(){
   const v=$("#view-catalog");
-  v.innerHTML=`<div class="doc-head"><div><h1>Service catalog</h1><div class="sub">${CAT.services.length} RRC forms and services, priced by unit and volume tier. Edits save in this browser and reprice draft proposals; sent and accepted proposals keep the prices they were sent with.${catDirty()?' <span class="tag">Edited</span>':''}</div></div>
+  v.innerHTML=`<div class="doc-head"><div><h1>Service catalog</h1><div class="sub">${Object.keys(CAT.forms).length} RRC forms and services, each with the situations it is filed for, priced by unit and volume tier. Edits save in this browser and reprice draft proposals; sent and accepted proposals keep the prices they were sent with.${catDirty()?' <span class="tag">Edited</span>':''}</div></div>
     <div class="tabs" role="tablist"><button role="tab" data-ct="services" aria-selected="${catTab==="services"}">Filings and services</button><button role="tab" data-ct="packages" aria-selected="${catTab==="packages"}">Package pricing</button></div></div>
     <div id="catBodyWrap"></div>`;
   v.querySelectorAll("[data-ct]").forEach(b=>b.addEventListener("click",()=>{catTab=b.dataset.ct;renderCatalog()}));
@@ -1535,21 +1562,24 @@ function renderCatalog(){
 function renderSvcTable(){
   const w=$("#catBodyWrap");
   w.innerHTML=`<div class="cat-tools"><input id="catQ" placeholder="Filter by form number, name or keyword" aria-label="Filter services"><span class="note" id="catN"></span>
-     <button class="btn primary" id="addSvc">Add service</button><button class="btn" id="resetCat">Restore workbook catalog</button></div>
+     <button class="btn primary" id="addSvc">Add a form</button><button class="btn" id="resetCat">Restore workbook catalog</button></div>
    <div class="mult-bar"><span><strong>Minimum annual fee per service</strong> <span class="note">the greater of this or the Standard price</span></span>
      <label>$ <input class="cell" type="number" step="any" min="0" id="minFee" value="${num(S.minFee)}" aria-label="Minimum annual fee" style="width:90px"></label></div>
    <div class="sc-filters"><div class="tabs">${[["","All"],["pkg","In the package"],["alc","À la carte"]].map(([k,l])=>`<button data-scf="${k}" aria-selected="${svcFilter===k}">${l}</button>`).join("")}</div></div>
    <div id="catBody"></div>`;
   const draw=()=>{const q=$("#catQ").value.toLowerCase().trim().split(/\s+/).filter(Boolean);
-    const rows=CAT.services.slice().sort((a,b)=>String(a.cat).localeCompare(b.cat)||a.n-b.n).filter(s=>(!svcFilter||(svcFilter==="pkg"?!!s.pkg:!s.pkg))&&q.every(t=>("#"+s.n+" "+s.name+" "+s.forms+" "+s.desc+" "+s.cat).toLowerCase().includes(t)));
-    $("#catN").textContent=rows.length+" shown";
-    const catIx=Object.fromEntries([...new Set(CAT.services.map(x=>x.cat))].sort().map((c,i)=>[c,i%7]));
-    const cats=[...new Set(rows.map(x=>x.cat))];
-    $("#catBody").innerHTML=cats.length?cats.map(c=>`<section class="sc-group scg${catIx[c]}"><h3>${esc(String(c).replace(/^[A-Z]\.\s*/,""))} <span class="hint">${rows.filter(x=>x.cat===c).length}</span></h3><div class="sc-grid">${rows.filter(x=>x.cat===c).map(svcCard).join("")}</div></section>`).join("")
-      :`<div class="empty-lines">No filings match.</div>`};
+    const G=Object.values(CAT.forms).map(g=>({g,L:sitsOf(g.id)})).filter(x=>x.L.length)
+      .filter(({g,L})=>(!svcFilter||(svcFilter==="pkg"?L.some(x=>x.pkg):L.some(x=>!x.pkg)))&&q.every(t=>(g.label+" "+g.name+" "+(g.desc||"")+" "+g.cat+" "+L.map(x=>"#"+x.n+" "+x.name+" "+(x.sit||"")+" "+x.forms+" "+x.desc).join(" ")).toLowerCase().includes(t)))
+      .sort((a,b)=>String(a.g.cat).localeCompare(b.g.cat)||a.L[0].n-b.L[0].n);
+    $("#catN").textContent=G.length+" form"+(G.length===1?"":"s")+" shown";
+    const catIx=Object.fromEntries([...new Set(Object.values(CAT.forms).map(x=>x.cat))].sort().map((c,i)=>[c,i%7]));
+    const cats=[...new Set(G.map(x=>x.g.cat))];
+    $("#catBody").innerHTML=cats.length?cats.map(c=>{const in_=G.filter(x=>x.g.cat===c);return `<section class="sc-group scg${catIx[c]}"><h3>${esc(String(c).replace(/^[A-Z]\.\s*/,""))} <span class="hint">${in_.length}</span></h3><div class="sc-grid">${in_.map(x=>formCard(x.g,x.L)).join("")}</div></section>`}).join("")
+      :`<div class="empty-lines">No forms match.</div>`};
   w.querySelectorAll("[data-scf]").forEach(b=>b.addEventListener("click",()=>{svcFilter=b.dataset.scf;w.querySelectorAll("[data-scf]").forEach(x=>x.setAttribute("aria-selected",x===b));draw()}));
-  $("#catBody").addEventListener("click",e=>{const c=e.target.closest("[data-edit]");if(c)editService(+c.dataset.edit)});
-  $("#catBody").addEventListener("keydown",e=>{const c=e.target.closest("[data-edit]");if(c&&(e.key==="Enter"||e.key===" ")){e.preventDefault();editService(+c.dataset.edit)}});
+  const openForm=id=>{const L=sitsOf(id);if(L.length>1)formEditor(id);else if(L.length)editService(L[0].n)};
+  $("#catBody").addEventListener("click",e=>{const c=e.target.closest("[data-form]");if(c)openForm(c.dataset.form)});
+  $("#catBody").addEventListener("keydown",e=>{const c=e.target.closest("[data-form]");if(c&&(e.key==="Enter"||e.key===" ")){e.preventDefault();openForm(c.dataset.form)}});
   $("#catQ").addEventListener("input",draw);draw();
   $("#minFee").addEventListener("change",e=>{S.minFee=Math.max(0,num(e.target.value));save();draw();toast("Minimum annual fee set to "+money(S.minFee)+" (or the Standard price, if higher)")});
   $("#addSvc").addEventListener("click",()=>editService(null));
@@ -1558,11 +1588,42 @@ function renderSvcTable(){
 let svcFilter="";
 function tierSpark(t,std){const n=t.pct.length;if(n<2)return `<span class="sc-flat">No volume tiers</span>`;const mx=Math.max(...t.pct.map(num))||1;
   return `<span class="sc-spark" aria-hidden="true">${t.pct.map((x,i)=>`<i class="t${i+1}" style="height:${Math.max(18,Math.round(num(x)/mx*100))}%"></i>`).join("")}</span><span>${n} tiers on ${esc(String(CAT.units[t.unit]?.count||t.unit).toLowerCase())} · ${money(std*Math.min(...t.pct.map(num)),0)} at T${n}</span>`}
-function svcCard(s){const std=num(s.lv[0].rec);
-  return `<div class="svc-card ${s.pkg?"in-pkg":""}" data-edit="${s.n}" role="button" tabindex="0" aria-label="Open #${s.n} ${esc(s.name)}">
-    <div class="sc-top"><span class="sc-n">#${s.n}</span><span class="sc-forms">${esc(s.forms||"")}</span>${s.pkg?`<span class="sc-pk on">Package</span>`:""}</div>
-    <div class="sc-name">${esc(s.name)}</div>
-    <div class="sc-foot"><span>${esc(s.freq||"")}</span><b>${money(std)}</b></div></div>`}
+function formCard(g,L){const pr=L.map(x=>num(x.lv[0].rec)),lo=Math.min(...pr),hi=Math.max(...pr);
+  return `<div class="svc-card" data-form="${esc(g.id)}" role="button" tabindex="0" aria-label="Open ${esc(g.label)} ${esc(g.name)}">
+    <div class="sc-top"><span class="sc-forms">${esc(g.label)}</span>${L.some(x=>x.pkg)?`<span class="sc-pk on">Package</span>`:""}</div>
+    <div class="sc-name">${esc(g.name)}</div>
+    <div class="sc-foot"><span>${L.length>1?L.length+" situations":esc(L[0].freq||"")}</span><b>${lo===hi?money(lo):money(lo)+"–"+money(hi)}</b></div></div>`}
+function formEditor(fid){
+  const g=CAT.forms[fid];if(!g)return;
+  const cats=[...new Set(CAT.services.map(x=>x.cat))].sort();
+  const dlg=document.createElement("dialog");dlg.className="editor";
+  dlg.innerHTML=`<form method="dialog" class="ed" novalidate>
+    <header><h2>${esc(g.label)} <span class="ed-name">${esc(g.name)}</span></h2><button class="icon-btn" value="cancel" aria-label="Close">×</button></header>
+    <div class="ed-body">
+     <section class="ed-sec s-id"><h4>The form</h4><div class="grid g4">
+      <div class="field"><label>RRC form(s)</label><input data-g="label" value="${esc(g.label)}"></div>
+      <div class="field span2"><label>Official form name</label><input data-g="name" value="${esc(g.name)}"></div>
+      <div class="field"><label>Category</label><select data-g="cat">${cats.map(c=>`<option value="${esc(c)}" ${c===g.cat?"selected":""}>${esc(String(c).replace(/^[A-Z]\.\s*/,""))}</option>`).join("")}</select></div>
+      <div class="field" style="grid-column:1/-1"><label>What the form is for</label><textarea data-g="desc" rows="3">${esc(g.desc||"")}</textarea></div>
+     </div></section>
+     <section class="ed-sec s-tier"><h4>Situations <span class="note">each one has its own price, frequency, unit, tiers and billing — pick the situation on a proposal</span></h4>
+      <div class="table-wrap"><table class="tier-tbl sit-tbl"><thead><tr><th>Situation</th><th>Frequency</th><th>Unit</th><th class="r">Standard</th><th>Billing</th><th>Tiers</th><th></th></tr></thead><tbody id="fmSits"></tbody></table></div>
+      <button class="btn small" type="button" id="fmAdd" style="margin-top:10px">+ Add a situation</button></section>
+    </div>
+    <footer><span style="flex:1"></span><button class="btn" value="cancel">Close</button><button class="btn primary" value="save">Save form</button></footer></form>`;
+  document.body.appendChild(dlg);
+  const draw=()=>{if(!CAT.forms[fid]){dlg.close();return}dlg.querySelector("#fmSits").innerHTML=sitsOf(fid).map(sv=>`<tr data-sit="${sv.n}" tabindex="0" class="sit-row">
+      <td><b>${esc(sv.sit||sv.name)}</b><div class="note">#${sv.n}</div></td><td>${esc(sv.freq||"")}</td><td>${esc(sv.unit)}</td><td class="r"><b>${money(sv.lv[0].rec)}</b></td>
+      <td>${sv.pkg?`<span class="sc-pk on">Package</span>`:"À la carte"}</td><td>${sv.tiers&&sv.tiers.pct.length>1?sv.tiers.pct.length+" tiers":"—"}</td><td><button class="btn small" type="button">Edit</button></td></tr>`).join("")};
+  const saveG=()=>{const v=k=>dlg.querySelector(`[data-g="${k}"]`).value;g.label=v("label").trim()||g.label;g.name=v("name").trim()||g.name;g.desc=v("desc");g.cat=v("cat");
+    CAT.services.forEach(x=>{if(x.form===fid)x.cat=g.cat});saveCat()};
+  const open=n=>{saveG();editService(n,{onDone:draw})};
+  dlg.querySelector("#fmSits").addEventListener("click",e=>{const r=e.target.closest("[data-sit]");if(r)open(+r.dataset.sit)});
+  dlg.querySelector("#fmSits").addEventListener("keydown",e=>{const r=e.target.closest("[data-sit]");if(r&&e.key==="Enter"){e.preventDefault();open(+r.dataset.sit)}});
+  dlg.querySelector("#fmAdd").addEventListener("click",()=>{saveG();editService(null,{form:fid,onDone:draw})});
+  dlg.addEventListener("close",()=>{if(dlg.returnValue==="save"){saveG();toast("Saved "+g.label)}dlg.remove();renderCatalog()});
+  draw();dlg.showModal();
+}
 function pkgSelect(s){const cur=s.pkg||"";
   return `<select class="cell-sel pksel ${cur?"pt"+PKC(cur):""}" data-pkgsel="${s.n}" aria-label="Package for #${s.n}">
     <option value="" ${cur?"":"selected"}>À la carte</option>${PKGS.map(pk=>`<option value="${esc(pk)}" ${cur===pk?"selected":""}>${esc(PKN(pk))}</option>`).join("")}</select>`}
@@ -1570,8 +1631,9 @@ function pkgWarn(s){if(String(s.forms).trim()==="—"||!s.freq||!s.pkg)return ""
   return !want?`<div class="note pk-warn">${esc(s.freq)} — usually à la carte</div>`:""}
 function tierNote(s){const r=CAT.units[s.unit];if(!r||r.pct.every(x=>num(x)===1))return "";const lo=Math.min(...r.pct.map(num));return `<div class="note" title="Standard price by tier: ${r.pct.map((x,i)=>"T"+(i+1)+" "+money(num(s.lv[0].rec)*num(x))).join(" · ")}">to ${money(num(s.lv[0].rec)*lo)} at T${r.pct.map(num).indexOf(lo)+1}</div>`}
 function inUse(n){return P.filter(p=>!p.lock&&p.lines.some(l=>l.n===n)).length}
-function editService(n){
-  const isNew=n==null, s=isNew?{n:Math.max(...CAT.services.map(x=>x.n))+1,cat:CAT.services[0].cat,name:"",forms:"",desc:"",unit:"Per filing",fee:0,min:0,state:0,prep:"Preparer",rev:"Senior",rs:0.15,sub:"No",
+function editService(n,opt={}){
+  const fg=opt.form&&CAT.forms[opt.form];
+  const isNew=n==null, s=isNew?{n:Math.max(...CAT.services.map(x=>x.n))+1,cat:fg?fg.cat:CAT.services[0].cat,name:fg?fg.name:"",forms:fg?fg.label:"",desc:"",form:fg?fg.id:undefined,sit:"",unit:"Per filing",fee:0,min:0,state:0,prep:"Preparer",rev:"Senior",rs:0.15,sub:"No",
       lv:LEVELS.map(()=>({scope:"",lo:0,hi:0,rec:0})),mult:[1],exp:0,freq:"As needed",tiers:{unit:"Per filing",bp:[],pct:[1]}}:clone(SVC[n]);
   ensureMult(s);
   const cats=[...new Set(CAT.services.map(x=>x.cat))].sort();
@@ -1580,9 +1642,10 @@ function editService(n){
   const inp=(l,k,val,type="text",cls="")=>`<div class="field ${cls}"><label>${l}</label><input data-k="${k}" type="${type}" ${type==="number"?'step="any"':""} value="${esc(val)}"></div>`;
   const sel=(l,k,val,opts)=>`<div class="field"><label>${l}</label><select data-k="${k}">${opts.map(o=>`<option ${o===val?"selected":""}>${esc(o)}</option>`).join("")}</select></div>`;
   dlg.innerHTML=`<form method="dialog" class="ed" novalidate>
-    <header><h2>${isNew?"Add a service":`Edit #${s.n} <span class="ed-name">${esc(s.name)}</span>`}</h2><button class="icon-btn" value="cancel" aria-label="Close">×</button></header>
+    <header><h2>${isNew?(fg?"Add a situation to "+esc(fg.label):"Add a form"):`Edit #${s.n} <span class="ed-name">${esc(s.name)}</span>`}</h2><button class="icon-btn" value="cancel" aria-label="Close">×</button></header>
     <div class="ed-body">
-     <section class="ed-sec s-id"><h4>The form or service</h4><div class="grid g4">
+     <section class="ed-sec s-id"><h4>${fg||(s.form&&sitsOf(s.form).length>1)?"The situation":"The form or service"}</h4><div class="grid g4">
+      ${inp("Situation — when this form is filed (e.g. Annual renewal)","sit",s.sit||"","text","span2")}
       ${inp("Service number","n",s.n,"number")}
       <div class="field span2"><label>Category</label><select data-k="catsel">${cats.map(c=>`<option value="${esc(c)}" ${c===s.cat?"selected":""}>${esc(String(c).replace(/^[A-Z]\.\s*/,""))}</option>`).join("")}<option value="__new">New category…</option></select>
         <input data-k="catnew" placeholder="Name the new category" style="display:none;margin-top:6px"></div>
@@ -1635,7 +1698,7 @@ function editService(n){
      <p class="note" style="margin-top:10px">The Standard price is the catalog price per unit, before volume tiers and the client's discretionary factor. Changing it scales the market range; keep it inside the range.</p>
      <p class="note err" id="edErr" style="color:var(--warn)"></p>
     </div>
-    <footer>${!isNew?`<button class="btn ghost danger" value="delete" id="edDel">Delete service</button>`:""}<span style="flex:1"></span><button class="btn" value="cancel">Cancel</button><button class="btn primary" value="save" id="edSave">${isNew?"Add service":"Save changes"}</button></footer>
+    <footer>${!isNew?`<button class="btn ghost danger" value="delete" id="edDel">${s.form&&sitsOf(s.form).length>1?"Delete situation":"Delete form"}</button>`:""}<span style="flex:1"></span><button class="btn" value="cancel">Cancel</button><button class="btn" value="addsit" id="edAddSit">Save and add a situation</button><button class="btn primary" value="save" id="edSave">${isNew?(fg?"Add situation":"Add form"):"Save changes"}</button></footer>
   </form>`;
   document.body.appendChild(dlg);
   const check=()=>{let ok=true;s.lv.forEach((x,i)=>{const m=dlg.querySelector(`[data-msg="${i}"]`);const lo=num(dlg.querySelector(`[data-lv="${i}"][data-lk="lo"]`).value),hi=num(dlg.querySelector(`[data-lv="${i}"][data-lk="hi"]`).value),rec=num(dlg.querySelector(`[data-lv="${i}"][data-lk="rec"]`).value);
@@ -1650,7 +1713,7 @@ function editService(n){
   const tU=dlg.querySelector('[data-k="tunit"]'),tN=dlg.querySelector('[data-k="tn"]'),tBody=dlg.querySelector("#tierRows");
   const cxv=()=>num(F(1,"rec")?F(1,"rec").value:(s.lv[1]||{}).rec), stdv=()=>num(F(0,"rec").value);
   const tierBad=()=>{for(let i=0;i<T.bp.length;i++){if(num(T.bp[i])<1||(i&&num(T.bp[i])<=num(T.bp[i-1])))return "Each tier's “To” must be at least 1 and higher than the tier before it."}return T.pct.some((x,i)=>isF(i)?num(T.flat[i])<=0:num(x)<=0)?"Every tier needs a price above zero.":""};
-  const tierCalc=()=>{const st=stdv(),cx=cxv();tBody.querySelectorAll("tr").forEach((tr,i)=>{tr.querySelector(".tf").textContent=i===0?"1":fmtNum(num(T.bp[i-1])+1);
+  const tierCalc=()=>{const st=stdv(),cx=cxv();tBody.querySelectorAll("tr[data-ti]").forEach((tr,i)=>{tr.querySelector(".tf").textContent=i===0?"1":fmtNum(num(T.bp[i-1])+1);
       const sp=tr.querySelector("[data-tp]");if(sp&&document.activeElement!==sp)sp.value=r2(st*num(T.pct[i]));
       });
     dlg.querySelectorAll("[data-std2]").forEach(x=>{if(document.activeElement!==x)x.value=st||""});const mn=dlg.querySelector("#edMin");if(mn)mn.textContent=money(Math.max(minFee(),st));
@@ -1658,7 +1721,7 @@ function editService(n){
     const others=CAT.services.filter(x=>x.n!==s.n&&x.tiers&&x.tiers.unit===tU.value).length;
     dlg.querySelector(".tier-copy").style.display=others?"":"none";dlg.querySelector("#tcTxt").textContent=`Also use these tiers for the other ${others} filing${others===1?"":"s"} tiered on ${String(CAT.units[tU.value]?.count||tU.value).toLowerCase()}`};
   const tierRows=()=>{const n=T.pct.length,unitW=String(CAT.units[tU.value]?.count||tU.value).toLowerCase();
-    tBody.innerHTML=T.pct.map((x,i)=>`<tr class="tr${i+1} ${isF(i)?"is-flat":""}"><td><span class="tier-b t${i+1}">Tier ${i+1}</span></td><td class="r tf"></td>
+    tBody.innerHTML=T.pct.map((x,i)=>`<tr data-ti="${i}" class="tr${i+1} ${isF(i)?"is-flat":""}"><td><span class="tier-b t${i+1}">Tier ${i+1}</span></td><td class="r tf"></td>
       <td class="r">${i<n-1?`<input class="cell" type="number" min="1" step="1" data-tb="${i}" value="${esc(T.bp[i])}" aria-label="Tier ${i+1} up to">`:`<span class="note">and up</span>`}</td>
       <td><select class="cell-sel" data-tbs="${i}" aria-label="Tier ${i+1} priced"><option value="unit" ${isF(i)?"":"selected"}>Per unit</option><option value="flat" ${isF(i)?"selected":""}>Flat fee for the tier</option></select></td>
       <td class="r">${isF(i)?`<span class="note">—</span>`:i===0?`<span class="note">100%</span>`:`<input class="cell" type="number" min="0" step="any" data-tpc="${i}" value="${Math.round(num(x)*1000)/10}" aria-label="Tier ${i+1} percent of Standard">`}</td>
@@ -1684,30 +1747,34 @@ function editService(n){
     else if(k==="rec"&&i!==0){const st=num(F(0,"rec").value);if(st>0)F(i,"mult").value=(num(t.value)/st).toFixed(2)}
     check();tierPrev()});check();tierPrev();
   dlg.querySelector('[data-k="unitsel"]').addEventListener("change",e=>{const u=e.target.value;if(T.unit===s.unit&&CAT.units[u]&&[...tU.options].some(o=>o.value===u)){tU.value=u;T.unit=u;tierRows()}});
-  dlg.querySelector("#edSave").addEventListener("click",e=>{const get=k=>dlg.querySelector(`[data-k="${k}"]`).value;const newN=Math.round(num(get("n")));
+  ["#edSave","#edAddSit"].forEach(sel=>dlg.querySelector(sel).addEventListener("click",e=>{const get=k=>dlg.querySelector(`[data-k="${k}"]`).value;const newN=Math.round(num(get("n")));
     const msg=!newN||newN<1?"Enter a service number.":(newN!==s.n&&SVC[newN]?"Service #"+newN+" already exists — choose another number.":(!get("name").trim()?"Enter a service name.":""));
     const tm=tierBad();
-    if(msg||tm){e.preventDefault();dlg.querySelector("#edErr").textContent=msg||("Volume tiers: "+tm)}});
+    if(msg||tm){e.preventDefault();dlg.querySelector("#edErr").textContent=msg||("Volume tiers: "+tm)}}));
   dlg.addEventListener("close",()=>{
-    const act=dlg.returnValue;
-    if(act==="save"){
+    const act=dlg.returnValue;let addAfter=null;
+    if(act==="save"||act==="addsit"){
       const get=k=>dlg.querySelector(`[data-k="${k}"]`).value;
       const newN=Math.round(num(get("n")));
       if(!newN||newN<1||(newN!==s.n&&SVC[newN])||!get("name").trim()){dlg.remove();return}
       const out={...s,n:newN,cat:(get("catsel")==="__new"?get("catnew").trim():get("catsel"))||"Other",forms:get("forms"),name:get("name").trim(),unit:(get("unitsel")==="__new"?get("unitnew").trim():get("unitsel"))||"Per filing",freq:get("freq"),desc:dlg.querySelector('[data-k="desc"]').value,
         fee:num(F(0,"rec").value),mult:s.lv.map((_,j)=>j===0?1:r2(F(j,"mult").value)),exp:num(get("exp")),state:num(get("state")),rs:Math.min(1,Math.max(0,num(get("rs"))/100)),prep:get("prep"),rev:get("rev"),
         lv:s.lv.map((x,i)=>({scope:dlg.querySelector(`[data-lv="${i}"][data-lk="scope"]`).value,lo:num(dlg.querySelector(`[data-lv="${i}"][data-lk="lo"]`).value),hi:num(dlg.querySelector(`[data-lv="${i}"][data-lk="hi"]`).value),rec:num(dlg.querySelector(`[data-lv="${i}"][data-lk="rec"]`).value)}))};
-      const pc=get("pkgcomp");delete out.pkg;if(pc)out.pkg=pc;
+      const pc=get("pkgcomp");delete out.pkg;if(pc)out.pkg=pc;out.sit=get("sit").trim();{const gg=CAT.forms[out.form];if(gg&&out.sit&&out.name===gg.name)out.name=gg.name+" ("+out.sit+")"}
       const tiers={unit:T.unit||out.unit,bp:T.bp.map(x=>Math.round(num(x))),pct:T.pct.map((x,i)=>i===0?1:Math.round(num(x)*10000)/10000)};
       if(T.flat.some(x=>x!=null))tiers.flat=T.flat.map(x=>x==null?null:r2(x));out.tiers=tiers;
       if(dlg.querySelector('[data-k="tcopy"]').checked)CAT.services.forEach(x=>{if(x.n!==s.n&&x.tiers&&x.tiers.unit===tiers.unit)x.tiers=clone(tiers)});
       if(isNew)CAT.services.push(out);else{const i=CAT.services.findIndex(x=>x.n===n);CAT.services[i]=out;if(newN!==n)P.forEach(p=>{if(!p.lock)p.lines.forEach(l=>{if(l.n===n)l.n=newN})})}
-      reindex();ensureUnits(CAT);syncSubs();saveCat();save();toast(isNew?"Service added":"Saved #"+newN+(check()?"":" — check the flagged ranges"));
+      ensureForms(CAT);const og=CAT.forms[out.form];
+      if(og){og.cat=out.cat;CAT.services.forEach(x=>{if(x.form===og.id)x.cat=out.cat});if(sitsOf(og.id).length===1){og.name=out.name;if(out.forms!==s.forms)og.label=formLabel(out)}}
+      reindex();ensureUnits(CAT);syncSubs();saveCat();save();toast(isNew?(fg?"Situation added":"Form added"):"Saved #"+newN+(check()?"":" — check the flagged ranges"));
+      if(act==="addsit")addAfter=out.form;
     } else if(act==="delete"){
       const u=inUse(n); if(u){toast(`#${n} is used in ${u} draft proposal${u>1?"s":""} — remove it there first`);}
-      else if(confirm(`Delete #${n} ${s.name}?`)){CAT.services=CAT.services.filter(x=>x.n!==n);reindex();saveCat();toast("Service deleted")}
+      else if(confirm(`Delete #${n} ${s.name}?`)){CAT.services=CAT.services.filter(x=>x.n!==n);ensureForms(CAT);reindex();saveCat();toast("Deleted")}
     }
     dlg.remove();renderCatalog();
+    if(addAfter)editService(null,{form:addAfter,onDone:opt.onDone});else if(opt.onDone)opt.onDone();
   });
   dlg.showModal();
 }
