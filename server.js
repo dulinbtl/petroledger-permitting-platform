@@ -1,7 +1,7 @@
 /*
  * PetroLedger — Permitting Business Model server
  *
- * Serves the single-page app (public/index.html) and a small JSON API that saves everything
+ * Serves the single-page app (index.html next to this file, or public/index.html) and a small JSON API that saves everything
  * users do to shared storage, so the whole team works from one set of data. No npm packages:
  * plain Node.js (20 or later), so the deployment zip needs no install step.
  *
@@ -27,7 +27,8 @@
  */
 "use strict";
 const http = require("http");
-const fsp = require("fs").promises;
+const fs = require("fs");
+const fsp = fs.promises;
 const path = require("path");
 const crypto = require("crypto");
 
@@ -36,7 +37,9 @@ const ON_APP_SERVICE = !!process.env.WEBSITE_SITE_NAME;
 // App Service injects WEBSITE_AUTH_ENABLED when built-in sign-in is on. Without it, the identity headers
 // could be forged, so the API refuses to run (TRUST_AUTH_HEADERS=1 overrides, for unusual setups only).
 const AUTH_ON = /^true$/i.test(process.env.WEBSITE_AUTH_ENABLED || "") || process.env.TRUST_AUTH_HEADERS === "1";
-const PUBLIC_DIR = path.join(__dirname, "public");
+// The page is index.html in the same folder as server.js; public/index.html is still accepted.
+const APP_FILES = [path.join(__dirname, "index.html"), path.join(__dirname, "public", "index.html")];
+const appFile = () => APP_FILES.find(f => fs.existsSync(f)) || APP_FILES[0];
 const MAX_BODY = 10 * 1024 * 1024; // 10 MB
 const DOC_NAMES = ["catalog", "settings", "actions"];
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
@@ -282,7 +285,7 @@ async function handleApi(req, res, url) {
 
 async function serveApp(req, res, url) {
   if (url.pathname !== "/" && url.pathname !== "/index.html") { res.writeHead(404, { "Content-Type": "text/plain" }); return res.end("Not found"); }
-  const html = await fsp.readFile(path.join(PUBLIC_DIR, "index.html"));
+  const html = await fsp.readFile(appFile());
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "same-origin" });
   res.end(req.method === "HEAD" ? undefined : html);
 }

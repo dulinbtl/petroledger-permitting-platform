@@ -1,6 +1,6 @@
 # PetroLedger — Permitting Business Model (web app)
 
-Single-page app (`public/index.html`) plus a small Node.js server (`server.js`, no npm packages)
+Single-page app (`index.html`) plus a small Node.js server (`server.js`, no npm packages)
 that saves everything users do to shared storage, so the team works from one set of data.
 
 ## Run on Azure App Service (Linux, Node 24 LTS)
@@ -17,7 +17,7 @@ that saves everything users do to shared storage, so the team works from one set
 
 ## Run locally
 `node server.js` → http://localhost:8080 (files under `./data`, user "Local user").
-Opening `public/index.html` directly as a file still works, saving only in that browser.
+Opening `index.html` directly as a file still works, saving only in that browser.
 
 ## API
 | Method | Path | Purpose |
