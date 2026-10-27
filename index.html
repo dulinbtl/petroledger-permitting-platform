@@ -564,8 +564,8 @@ table.cat tr.grp td{background:var(--mist);font-family:var(--display);font-weigh
 .sc-group h3{font-family:var(--display);font-weight:700;font-size:17px;margin:0 0 10px;padding-left:10px;border-left:5px solid var(--gc,#102B38)}
 .sc-group h3 .hint{font-family:var(--text);font-weight:500;font-size:12.5px;color:var(--slate);margin-left:4px}
 .scg0{--gc:#102B38}.scg1{--gc:#2F5597}.scg2{--gc:#6B4E9B}.scg3{--gc:#2F7D55}.scg4{--gc:#D3A24A}.scg5{--gc:#2A7F8C}.scg6{--gc:#B5452F}
-.sc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px}
-.svc-card{background:#fff;border:1px solid var(--rule);border-top:3px solid var(--gc,#102B38);border-radius:var(--r);padding:12px 14px;display:flex;flex-direction:column;gap:8px;cursor:pointer;transition:box-shadow .15s,transform .15s;min-width:0}
+.sc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.svc-card{background:#fff;border:1px solid var(--rule);border-left:3px solid var(--gc,#102B38);border-radius:var(--r);padding:10px 14px;display:flex;flex-direction:column;gap:6px;cursor:pointer;transition:box-shadow .15s,transform .15s;min-width:0}
 .svc-card:hover{box-shadow:0 6px 18px rgba(16,43,56,.12);transform:translateY(-1px)}
 .svc-card:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .sc-top{display:flex;align-items:center;gap:8px;font-size:12px}
@@ -573,7 +573,8 @@ table.cat tr.grp td{background:var(--mist);font-family:var(--display);font-weigh
 .sc-forms{font-weight:700;color:var(--ink);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sc-pk{font-size:11px;font-weight:700;padding:1px 8px;border-radius:10px;background:#F1F1EE;color:#5A5A52;white-space:nowrap}
 .sc-pk.on{background:#EAF3EE;color:#1F5A3C}
-.sc-name{font-weight:600;font-size:14px;line-height:1.35;color:var(--ink);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.sc-foot{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-top:auto;font-size:12px;color:var(--slate)}.sc-foot b{font-family:var(--display);font-size:15px;color:var(--ink)}
+.sc-name{font-weight:500;font-size:14px;line-height:1.35;color:var(--ink);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .sc-meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;color:var(--slate)}
 .sc-meta>span:not(.freq){background:#F3F6F8;border-radius:10px;padding:1px 8px}
 .sc-price{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;border-top:1px solid #EEF1F3;padding-top:8px;margin-top:auto}
@@ -1543,14 +1544,11 @@ function renderSvcTable(){
 let svcFilter="";
 function tierSpark(t,std){const n=t.pct.length;if(n<2)return `<span class="sc-flat">No volume tiers</span>`;const mx=Math.max(...t.pct.map(num))||1;
   return `<span class="sc-spark" aria-hidden="true">${t.pct.map((x,i)=>`<i class="t${i+1}" style="height:${Math.max(18,Math.round(num(x)/mx*100))}%"></i>`).join("")}</span><span>${n} tiers on ${esc(String(CAT.units[t.unit]?.count||t.unit).toLowerCase())} · ${money(std*Math.min(...t.pct.map(num)),0)} at T${n}</span>`}
-function svcCard(s){const std=num(s.lv[0].rec),cx=num((s.lv[1]||{}).rec),bad=s.lv.some(x=>x.rec<x.lo||x.rec>x.hi);
+function svcCard(s){const std=num(s.lv[0].rec);
   return `<div class="svc-card ${s.pkg?"in-pkg":""}" data-edit="${s.n}" role="button" tabindex="0" aria-label="Open #${s.n} ${esc(s.name)}">
-    <div class="sc-top"><span class="sc-n">#${s.n}</span><span class="sc-forms">${esc(s.forms||"")}</span><span class="sc-pk ${s.pkg?"on":""}">${s.pkg?"Package":"À la carte"}</span></div>
+    <div class="sc-top"><span class="sc-n">#${s.n}</span><span class="sc-forms">${esc(s.forms||"")}</span>${s.pkg?`<span class="sc-pk on">Package</span>`:""}</div>
     <div class="sc-name">${esc(s.name)}</div>
-    <div class="sc-meta"><span class="freq ${freqCls(s.freq||"")}">${esc(s.freq||"—")}</span><span>${esc(s.unit)}</span>${num(s.exp)?`<span>Expedite +${money(s.exp)}</span>`:""}${s.state?`<span>RRC fee ${money(s.state)}</span>`:""}</div>
-    <div class="sc-price"><div><span>Standard</span><b>${money(std)}</b></div><div><span>Complex</span><b>${money(cx)}</b></div><div><span>Minimum / yr</span><b>${money(minOf(s))}</b></div></div>
-    <div class="sc-tiers">${tierSpark(s.tiers||{pct:[1],bp:[]},std)}</div>
-    ${bad?`<div class="note sc-warn">A recommended fee sits outside its range</div>`:""}</div>`}
+    <div class="sc-foot"><span>${esc(s.freq||"")}</span><b>${money(std)}</b></div></div>`}
 function pkgSelect(s){const cur=s.pkg||"";
   return `<select class="cell-sel pksel ${cur?"pt"+PKC(cur):""}" data-pkgsel="${s.n}" aria-label="Package for #${s.n}">
     <option value="" ${cur?"":"selected"}>À la carte</option>${PKGS.map(pk=>`<option value="${esc(pk)}" ${cur===pk?"selected":""}>${esc(PKN(pk))}</option>`).join("")}</select>`}
