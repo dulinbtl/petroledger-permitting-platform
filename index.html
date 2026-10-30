@@ -735,6 +735,7 @@ const LEVELS = ["Standard"]; // complexity levels retired Oct 27, 2026 — repla
 const OC="Operator Compliance", PK_WELL="Well Permitting & Completion", PK_ENV="Operator, Environmental & Injection"; // legacy names (migrations only)
 const REC="Recurring", ONE="One Time", ASN="As Needed"; // ONE / ASN: retired packages (migrations only)
 const PKGS = [REC];
+const PKG_ON=false; // package pricing switched off Oct 30, 2026 — every service is à la carte; set true to bring the package back
 const PKG_NAME="Recurring Compliance Package";
 const PKN=pk=>pk===REC?PKG_NAME:pk;
 const PERFILING=()=>false;
@@ -1181,7 +1182,7 @@ function feeCore(sv,p,{units,level,override,exp,rate}){
   const listP=listPrice(sv,level), tq=tierFor(p,sv), isOv=override!=null&&override!=="";
   const isFlat=tq.flatFee!=null, lvm=num(sv.lv[0].rec)>0?listP/num(sv.lv[0].rec):1, fct=clientFactor(p);
   const unitP=isOv?num(override):isFlat?Math.round(tq.flatFee*lvm*fct):Math.round(listP*tq.pct*fct*100)/100, py=perYear(sv), q=isFlat?(units>0?1:0):units;
-  const price=Math.round(unitP*(1-(isOv?0:rate))*100)/100, base=py*q*price, mn=units>0?Math.round(minOf(sv,p)*fct):0;
+  const price=Math.round(unitP*(1-(isOv?0:rate))*100)/100, base=py*q*price, mn=0; // minimum now applies to the proposal total
   const expFee=exp&&units>0?num(sv.exp):0, fee=units>0?Math.max(base,mn)+expFee:0;
   const value=units>0?Math.max(py*q*unitP,mn)+expFee:0;
   return {listP,tq,unitP,isOv,py,price,base,mn,minApplied:units>0&&mn>base,expFee,fee,value,pkRate:isOv?0:rate,isFlat,fct:isOv?1:fct}}
@@ -1198,6 +1199,7 @@ function calcLine(l,p){
 }
 const getEng=p=>(p&&p.lock&&p.lock.engage)||{on:S.pkgCap,rates:S.engage};
 function calcPkgs(p){
+  if(!PKG_ON)return [];
   const disc=num(p.prop.discount)/100, term=num(p.prop.term)||12;
   const eng=getEng(p), count=pkgCount(p), rate=pkgRate(p);
   return PKGS.map(pk=>{
@@ -1216,15 +1218,16 @@ function totals(p){
   const pkL=L.filter(x=>x.c.pk), alcL=L.filter(x=>!x.c.pk);
   const recAnnual=K.reduce((a,x)=>a+x.annual,0), pkLineAnnual=pkL.reduce((a,x)=>a+x.c.fee,0);
   const svcFees=alcL.reduce((a,x)=>a+x.c.fee,0), pkgFees=K.reduce((a,x)=>a+x.termFee,0)+pkLineAnnual*tf;
-  const discount=(svcFees+pkgFees)*disc, net=svcFees+pkgFees-discount;
+  const discount=(svcFees+pkgFees)*disc, net0=svcFees+pkgFees-discount, minP=minFee(p);
+  const minAdj=L.some(x=>num(x.l.qty)>0)&&net0<minP?minP-net0:0, net=net0+minAdj, kL=net0>0?net/net0:1; // proposal minimum
   const state=L.reduce((a,x)=>a+x.c.state*f(x),0), handling=state*S.handling;
   const tpBilled=L.reduce((a,x)=>a+x.c.tpBilled,0), absorbed=L.reduce((a,x)=>a+x.c.absorbed,0);
-  const labor=L.reduce((a,x)=>a+x.c.labor*f(x),0)+K.reduce((a,x)=>a+x.prep+x.sen,0);
+  const labor=(L.reduce((a,x)=>a+x.c.labor*f(x),0)+K.reduce((a,x)=>a+x.prep+x.sen,0))*kL;
   const gm=net+handling-labor-absorbed;
-  const prepMo=(L.reduce((a,x)=>a+x.c.prepRole*f(x),0)+K.reduce((a,x)=>a+x.prep,0))/term;
-  const senMo=(L.reduce((a,x)=>a+x.c.senRole*f(x),0)+K.reduce((a,x)=>a+x.sen,0))/term;
-  const split=(p.prop.alcBill||"full")==="split", alcNet=svcFees*(1-disc);
-  return {L,K,pkL,alcL,svcFees,pkgFees,recAnnual,pkLineAnnual,discount,net,state,handling,tpBilled,absorbed,labor,gm,gmPct:net?gm/net:0,
+  const prepMo=(L.reduce((a,x)=>a+x.c.prepRole*f(x),0)+K.reduce((a,x)=>a+x.prep,0))*kL/term;
+  const senMo=(L.reduce((a,x)=>a+x.c.senRole*f(x),0)+K.reduce((a,x)=>a+x.sen,0))*kL/term;
+  const split=(p.prop.alcBill||"full")==="split", alcNet=svcFees*(1-disc)+minAdj;
+  return {L,K,pkL,alcL,svcFees,pkgFees,recAnnual,pkLineAnnual,discount,net,minAdj,minP,state,handling,tpBilled,absorbed,labor,gm,gmPct:net?gm/net:0,
     total:net+state+handling+tpBilled,monthly:(recAnnual+pkLineAnnual)/12*(1-disc),alcUpfront:split?alcNet/2:alcNet,alcCompletion:split?alcNet/2:0,split,prepMo,senMo,term};
 }
 
@@ -1275,7 +1278,7 @@ function renderBuilder(p){
 
    <section class="panel b-counts"><h3>Counts by unit <span class="hint">Units for each service and the tier for every service on that unit</span></h3>
     <div id="unitBox"></div></section>
-   <section class="panel b-pk"><h3>Package <span class="hint">The ${esc(PKG_NAME)} is billed monthly at one-twelfth of the annual fee; services outside it are à la carte</span></h3>
+   <section class="panel b-pk ${PKG_ON?"":"hidden"}"><h3>Package <span class="hint">The ${esc(PKG_NAME)} is billed monthly at one-twelfth of the annual fee; services outside it are à la carte</span></h3>
     <div class="pkgs" id="pkgBox"></div><div id="pkgDetail"></div></section>
 
    <section class="panel b-svc"><h3>Services <span class="hint">Type a form number, form name or keyword, or browse by category</span></h3>
@@ -1283,7 +1286,7 @@ function renderBuilder(p){
       <div class="combo"><input id="svcSearch" role="combobox" aria-expanded="false" aria-controls="svcList" aria-autocomplete="list" placeholder="Search services — e.g. P-4, W-14, pooling, waste hauler" autocomplete="off"><ul id="svcList" role="listbox" class="hidden"></ul></div>
       <select class="browse" id="svcBrowse" aria-label="Browse services by category"><option value="">Browse all services…</option>${browseOptions()}</select>
     </div>
-    <div class="line-head"><span>Unit and minimum</span><span>Units</span><span>× a year</span><span>Expedite</span><span>Price / unit</span><span>Annual fee</span><span></span></div>
+    <div class="line-head"><span>Unit and tier</span><span>Units</span><span>× a year</span><span>Expedite</span><span>Price / unit</span><span>Annual fee</span><span></span></div>
     <div class="lines" id="lines"></div></section>
   </div>
   <aside class="ledger" id="ledger" aria-live="polite"></aside></div>`;
@@ -1388,7 +1391,7 @@ function renderLines(p,keepFocus){
     row.querySelector("[data-tog]").addEventListener("click",()=>{open.has(l.id)?open.delete(l.id):open.add(l.id);renderLines(p)});
   });
 }
-function unitInfo(l,c){const s=c.s,pk=s.pkg;return `${esc(s.unit)} · min ${money(c.mn||minOf(s))}${c.tq&&c.tq.tier>1&&!c.tq.flat?` · <span class="tier-b t${c.tq.tier}">${esc(tierTxt(c.tq))}</span>`:""}${!pk?" · à la carte":" · also in the "+esc(PKG_NAME)}`}
+function unitInfo(l,c){const s=c.s,pk=s.pkg;return `${esc(s.unit)}${c.tq&&c.tq.tier>1&&!c.tq.flat?` · <span class="tier-b t${c.tq.tier}">${esc(tierTxt(c.tq))}</span>`:""}${!pk||!PKG_ON?" · à la carte":" · also in the "+esc(PKG_NAME)}`}
 function puHTML(l,c){const ov=c.isOv;const parts=[];if(!ov&&c.tq.pct!==1)parts.push("T"+c.tq.tier);if(!ov&&c.fct!==1)parts.push((c.fct>1?"+":"−")+pct(Math.abs(c.fct-1)).replace(".0","")+" client");if(!ov&&c.pkRate)parts.push("−"+pct(c.pkRate).replace(".0",""));
   return money(c.price,(c.price%1)?2:0)+`<small>${c.isFlat?"flat fee for tier "+c.tq.tier:"per "+esc(unitWord(c.s.unit,1))}</small>`+(ov?"<small>override</small>":(parts.length?`<small>catalog ${money(c.listP)} · ${parts.join(" ")}</small>`:""))+(c.expFee?`<small>+ ${money(c.expFee)} expedite</small>`:"")}
 function detailHTML(l,c,p){const s=c.s;
@@ -1396,7 +1399,7 @@ function detailHTML(l,c,p){const s=c.s;
     <p class="k">Scope at ${esc(l.level)}</p><p>${esc(scopeFor(s,l.level))}</p>
     <p class="k" style="margin-top:10px">What the form is for</p><p>${esc(s.desc)}</p>
     <div class="levels">${s.lv.map((v,i)=>`<div class="${LEVELS[i]===l.level?"sel":""}"><b>${LEVELS[i]}</b>${money(v.lo)}–${money(v.hi)}${i===s.lv.length-1?"+":""}<br>Rec. ${money(v.rec)}</div>`).join("")}</div>
-    <p class="note" style="margin-top:6px">${c.isFlat?`Tier ${c.tq.tier} is a flat fee: annual fee = ${c.py} a year × the flat fee of ${money(c.unitP)}, whatever the number of units in the tier. `:""}Annual fee = units × ${c.py} a year (${esc(s.freq||"")}) × the Standard price${c.fct!==1?" × the client's discretionary factor ("+pct(c.fct).replace(".0","")+")":""}${c.tq.pct!==1?" at "+esc(tierTxt(c.tq))+" (tiered on "+esc(String(UNITS(p)[c.tq.unit]?.count||c.tq.unit).toLowerCase())+")":""} — at least ${money(minOf(s))} (the greater of the ${money(minFee())} minimum or the Standard price) — plus a flat ${num(s.exp)?money(s.exp):"expedite fee"} if expedited. Ranges are estimates — validate with competitor quotes.</p>
+    <p class="note" style="margin-top:6px">${c.isFlat?`Tier ${c.tq.tier} is a flat fee: annual fee = ${c.py} a year × the flat fee of ${money(c.unitP)}, whatever the number of units in the tier. `:""}Annual fee = units × ${c.py} a year (${esc(s.freq||"")}) × the Standard price${c.fct!==1?" × the client's discretionary factor ("+pct(c.fct).replace(".0","")+")":""}${c.tq.pct!==1?" at "+esc(tierTxt(c.tq))+" (tiered on "+esc(String(UNITS(p)[c.tq.unit]?.count||c.tq.unit).toLowerCase())+")":""} — plus a flat ${num(s.exp)?money(s.exp):"expedite fee"} if expedited. Ranges are estimates — validate with competitor quotes.</p>
   </div><div>
     <div class="grid g2">
       <div class="field"><label>Fee override per unit</label><input data-f="override" type="number" min="0" step="any" value="${esc(l.override??"")}" placeholder="${money(listPrice(s,l.level))}"></div>
@@ -1427,18 +1430,19 @@ function renderLedger(p){
   const okGM=t.gmPct>=S.gm-1e-9;
   const tc=teamCapacity(p.id), okCap=t.prepMo<=tc.spPrep+1e-6&&t.senMo<=tc.spSen+1e-6;
   const w=Math.max(0,Math.min(1,t.gmPct));
-  el.innerHTML=`<h3>Proposal ledger</h3><div class="who">${esc(t.term)}-month term${clientFactor(p)!==1?" · factor "+pct(clientFactor(p)).replace(".0","")+" ("+factorTxt(clientFactor(p))+")":""}${num(p.prop.discount)?" · "+esc(p.prop.discount)+"% discount":""}</div>
+  el.innerHTML=`<h3>Proposal ledger</h3>${t.minAdj?`<div class="verdict bad" style="margin:6px 0 4px">Below the ${money(t.minP)} proposal minimum — ${money(t.minAdj)} added.</div>`:""}<div class="who">${esc(t.term)}-month term${clientFactor(p)!==1?" · factor "+pct(clientFactor(p)).replace(".0","")+" ("+factorTxt(clientFactor(p))+")":""}${num(p.prop.discount)?" · "+esc(p.prop.discount)+"% discount":""}</div>
    <h4 class="lg lg1">Client investment</h4>
-   ${row("Package for the term",money(t.pkgFees))}${row("À la carte services",money(t.svcFees))}
+   ${PKG_ON?row("Package for the term",money(t.pkgFees)):""}${row(PKG_ON?"À la carte services":"Services",money(t.svcFees))}
    ${t.discount?row("Discount",money(-t.discount)):""}
+   ${t.minAdj?row("Minimum fee adjustment",money(t.minAdj)):""}
    ${row("Professional fees",money(t.net),"total")}
    ${row("RRC state fees",money(t.state),"muted")}${row("Handling fee",money(t.handling),"muted")}
    ${t.tpBilled?row("Third-party costs billed",money(t.tpBilled),"muted"):""}
    ${row("Total client investment",money(t.total),"total")}
    <h4 class="lg lg1">Billing</h4>
-   ${row("Package, billed monthly",money(t.monthly)+" / mo")}
-   ${row(t.split?"À la carte — 50% upfront":"À la carte — 100% upfront",money(t.alcUpfront))}
-   ${t.split?row("À la carte — 50% on completion",money(t.alcCompletion)):""}
+   ${PKG_ON?row("Package, billed monthly",money(t.monthly)+" / mo"):""}
+   ${row((PKG_ON?"À la carte — ":"Billed ")+(t.split?"50% upfront":"100% upfront"),money(t.alcUpfront))}
+   ${t.split?row((PKG_ON?"À la carte — ":"Billed ")+"50% on completion",money(t.alcCompletion)):""}
    <h4 class="lg lg2">Economics</h4>
    ${row("Direct labor (preparer + Senior pay)",money(t.labor))}
    ${t.absorbed?row("Third-party costs absorbed",money(t.absorbed)):""}
@@ -1492,7 +1496,7 @@ function renderDoc(p){
   const valid=(()=>{if(!p.prop.date)return"";const d=new Date(p.prop.date+"T12:00:00");d.setDate(d.getDate()+num(p.prop.valid));return d.toISOString().slice(0,10)})();
   const pk=t.K.filter(k=>k.on&&k.annual>0&&!k.perFiling), lines=t.L.filter(x=>num(x.l.qty)>0);
   const scopeTbl=(L,foot,fh="Annual fee")=>`<table><thead><tr><th>Service</th><th class="r">Units × a year</th><th class="r">Price per unit</th><th class="r">${fh}</th></tr></thead><tbody>
-     ${L.map(({l,c})=>`<tr><td><strong>${esc(c.s.name)}</strong><div class="scope">${esc(scopeFor(c.s,l.level))}.${c.minApplied?" Minimum annual fee of "+money(c.mn)+" applies.":""}</div>${c.expFee?'<div class="note" style="color:#B5452F;font-weight:600">Expedited +'+money(c.expFee*(1-disc))+'</div>':""}</td><td class="r">${esc(fmtNum(l.qty))} <span class="note">${esc(unitWord(c.s.unit,l.qty))}</span> × ${c.py}</td><td class="r">${money(c.price*(1-disc),(c.price%1)?2:0)}${c.isFlat?`<div class="note">flat fee, tier ${c.tq.tier}</div>`:""}</td><td class="r">${money(c.fee*(1-disc))}</td></tr>`).join("")}
+     ${L.map(({l,c})=>`<tr><td><strong>${esc(c.s.name)}</strong><div class="scope">${esc(scopeFor(c.s,l.level))}.</div>${c.expFee?'<div class="note" style="color:#B5452F;font-weight:600">Expedited +'+money(c.expFee*(1-disc))+'</div>':""}</td><td class="r">${esc(fmtNum(l.qty))} <span class="note">${esc(unitWord(c.s.unit,l.qty))}</span> × ${c.py}</td><td class="r">${money(c.price*(1-disc),(c.price%1)?2:0)}${c.isFlat?`<div class="note">flat fee, tier ${c.tq.tier}</div>`:""}</td><td class="r">${money(c.fee*(1-disc))}</td></tr>`).join("")}
      ${foot}</tbody></table>`;
   const alcLines=t.alcL.filter(x=>num(x.l.qty)>0);
 
@@ -1516,15 +1520,16 @@ function renderDoc(p){
    </div>
    ${H("Investment summary")}
    <table><tbody>
-    ${t.alcL.some(x=>num(x.l.qty)>0)?`<tr><td>Priority work (à la carte) — permits, filings and projects — billed ${t.split?"50% upfront and 50% on completion":"100% upfront"}</td><td class="r">${money(t.svcFees*(1-disc))}</td></tr>`:""}
+    ${t.alcL.some(x=>num(x.l.qty)>0)?`<tr><td>${PKG_ON?"Priority work (à la carte) — permits, filings and projects":"Permits, filings and projects"} — billed ${t.split?"50% upfront and 50% on completion":"100% upfront"}</td><td class="r">${money(t.svcFees*(1-disc))}</td></tr>`:""}
     ${t.pkgFees>0?`<tr><td>${esc(PKG_NAME)} — ${money(t.monthly)} per month for ${esc(t.term)} months, billed monthly</td><td class="r">${money(t.pkgFees*(1-disc))}</td></tr>`:""}
     ${disc?`<tr><td>Includes a discount of ${esc(p.prop.discount)}% on professional fees</td><td class="r">${money(-t.discount)}</td></tr>`:""}
+    ${t.minAdj?`<tr><td>Minimum professional fees per proposal (${money(t.minP)}) — adjustment</td><td class="r">${money(t.minAdj)}</td></tr>`:""}
     <tr class="sum"><td>Professional fees for the term</td><td class="r">${money(t.net)}</td></tr>
     <tr><td>Estimated RRC state fees, billed at cost plus a ${pct(S.handling).replace(".0","")} handling fee</td><td class="r">${money(t.state+t.handling)}</td></tr>
     ${t.tpBilled?`<tr><td>Estimated third-party costs billed at cost (publication, certified mail, engineering)</td><td class="r">${money(t.tpBilled)}</td></tr>`:""}
     <tr class="grand"><td>Estimated total investment</td><td class="r">${money(t.total)}</td></tr>
    </tbody></table>
-   ${alcLines.length?H("Priority work — à la carte permits, filings and projects")+`<p>Work to start right away on acceptance, billed ${t.split?"50% upfront and 50% on completion":"100% upfront"}.</p>`+scopeTbl(alcLines,`<tr class="sum"><td colspan="3">À la carte — billed ${t.split?"50% upfront and 50% on completion":"100% upfront"}</td><td class="r">${money(t.svcFees*(1-disc))}</td></tr>`,"Fee")+`<p class="note" style="margin-top:8px">Units are estimates. Each service is subject to its minimum annual fee. Expedited handling is available on à la carte services for a flat fee per service.</p>`:""}
+   ${alcLines.length?H(PKG_ON?"Priority work — à la carte permits, filings and projects":"Permits, filings and projects")+`<p>Work to start right away on acceptance, billed ${t.split?"50% upfront and 50% on completion":"100% upfront"}.</p>`+scopeTbl(alcLines,`<tr class="sum"><td colspan="3">À la carte — billed ${t.split?"50% upfront and 50% on completion":"100% upfront"}</td><td class="r">${money(t.svcFees*(1-disc))}</td></tr>`,"Fee")+`<p class="note" style="margin-top:8px">Units are estimates. A minimum of ${money(t.minP)} in professional fees applies to the proposal. Expedited handling is available for a flat fee per service.</p>`:""}
    ${pk.length?H(esc(PKG_NAME))+`<p>A fixed annual fee billed monthly, covering every recurring RRC filing listed. Each filing is priced on the operator's units × the times it is filed a year; RRC state fees are billed separately.</p>`+
      pk.map(k=>`<div class="pk"><header><strong>${esc(PKN(k.pk))}</strong><span>${money(k.annual*(1-disc))} per year · ${money(k.annual*(1-disc)/12)} per month</span></header>
        <table style="margin-top:8px"><tbody>${k.items.filter(i=>i.fee>0).map(i=>`<tr><td>${esc(i.s.name)}${i.expFee?'<div class="note" style="color:#B5452F;font-weight:600">Expedited</div>':""}</td><td class="r">${fmtNum(i.units)} ${esc(unitWord(i.s.unit,i.units))} × ${i.py} a year<div class="note">${esc(i.s.freq||"")}${i.isFlat?` · flat fee, tier ${i.tq.tier}`:""}</div></td><td class="r">${money(i.fee*(1-disc))}</td></tr>`).join("")}</tbody></table>
@@ -1534,11 +1539,11 @@ function renderDoc(p){
    <ol class="terms">
     <li>RRC state filing fees and surcharges are billed at cost plus a ${pct(S.handling).replace(".0","")} handling fee and are not part of the professional fees.</li>
     <li>Fees are based on the scope and counts in this proposal. If the work proves materially different — for example title issues, protests or missing data — we will tell you and agree any change in fees before continuing.</li>
-    <li>Each service carries a minimum annual fee${clientFactor(p)===1?` of the greater of ${money(minFee(p))} or its Standard price`:", shown with the service where it applies"}. À la carte services marked "Expedited" include a flat expedite fee for rush handling and processing (expedite is not offered within the package); RRC expedite fees, where the RRC charges one, are passed through separately.</li>
+    <li>A minimum of ${money(minFee(p))} in professional fees applies to this proposal. ${PKG_ON?"À la carte services":"Services"} marked "Expedited" include a flat expedite fee for rush handling and processing${PKG_ON?" (expedite is not offered within the package)":""}; RRC expedite fees, where the RRC charges one, are passed through separately.</li>
     <li>Not included in fixed fees and billed separately: contested case hearings (per hearing day), third-party engineering, surveying, public-notice publication, certified mail and outside legal counsel.</li>
     <li>You provide complete and timely well, lease, ownership and operating data and authorized signatures. Deadlines missed because information arrived late are outside our responsibility.</li>
-    <li>The ${esc(PKG_NAME)} renews for successive terms unless either party gives 30 days' written notice. If operator counts move by more than one tier, the package fee is adjusted at renewal.</li>
-    <li>The package fee is billed monthly at one-twelfth of the annual fee. À la carte services are billed ${(p.prop.alcBill||"full")==="split"?"50% upfront and 50% on completion":"100% upfront"}. Payment terms: ${esc(p.prop.terms)}. This proposal is valid until ${fmtDate(valid)}.</li>
+    ${PKG_ON?`<li>The ${esc(PKG_NAME)} renews for successive terms unless either party gives 30 days' written notice. If operator counts move by more than one tier, the package fee is adjusted at renewal.</li>`:""}
+    <li>${PKG_ON?"The package fee is billed monthly at one-twelfth of the annual fee. À la carte services":"Services"} are billed ${(p.prop.alcBill||"full")==="split"?"50% upfront and 50% on completion":"100% upfront"}. Payment terms: ${esc(p.prop.terms)}. This proposal is valid until ${fmtDate(valid)}.</li>
    </ol>
    ${H("Acceptance")}
    <p>Signing below authorizes the services and fees in this proposal.</p>
@@ -1555,18 +1560,18 @@ function catDirty(){return JSON.stringify(CAT)!==JSON.stringify(baseCatalog())}
 function renderCatalog(){
   const v=$("#view-catalog");
   v.innerHTML=`<div class="doc-head"><div><h1>Service catalog</h1><div class="sub">${Object.keys(CAT.forms).length} RRC forms and services, each with the situations it is filed for, priced by unit and volume tier. Edits save in this browser and reprice draft proposals; sent and accepted proposals keep the prices they were sent with.${catDirty()?' <span class="tag">Edited</span>':''}</div></div>
-    <div class="tabs" role="tablist"><button role="tab" data-ct="services" aria-selected="${catTab==="services"}">Filings and services</button><button role="tab" data-ct="packages" aria-selected="${catTab==="packages"}">Package pricing</button></div></div>
+    <div class="tabs" role="tablist"><button role="tab" data-ct="services" aria-selected="${catTab==="services"}">Filings and services</button>${PKG_ON?`<button role="tab" data-ct="packages" aria-selected="${catTab==="packages"}">Package pricing</button>`:""}</div></div>
     <div id="catBodyWrap"></div>`;
   v.querySelectorAll("[data-ct]").forEach(b=>b.addEventListener("click",()=>{catTab=b.dataset.ct;renderCatalog()}));
-  catTab==="packages"?renderPkgPricing():renderSvcTable();
+  catTab==="packages"&&PKG_ON?renderPkgPricing():renderSvcTable();
 }
 function renderSvcTable(){
   const w=$("#catBodyWrap");
   w.innerHTML=`<div class="cat-tools"><input id="catQ" placeholder="Filter by form number, name or keyword" aria-label="Filter services"><span class="note" id="catN"></span>
      <button class="btn primary" id="addSvc">Add a form</button><button class="btn" id="resetCat">Restore workbook catalog</button></div>
-   <div class="mult-bar"><span><strong>Minimum annual fee per service</strong> <span class="note">the greater of this or the Standard price</span></span>
-     <label>$ <input class="cell" type="number" step="any" min="0" id="minFee" value="${num(S.minFee)}" aria-label="Minimum annual fee" style="width:90px"></label></div>
-   <div class="sc-filters"><div class="tabs">${[["","All"],["pkg","In the package"],["alc","À la carte"]].map(([k,l])=>`<button data-scf="${k}" aria-selected="${svcFilter===k}">${l}</button>`).join("")}</div></div>
+   <div class="mult-bar"><span><strong>Minimum professional fees per proposal</strong> <span class="note">a proposal below this is raised to it</span></span>
+     <label>$ <input class="cell" type="number" step="any" min="0" id="minFee" value="${num(S.minFee)}" aria-label="Minimum per proposal" style="width:90px"></label></div>
+   <div class="sc-filters ${PKG_ON?"":"hidden"}"><div class="tabs">${[["","All"],["pkg","In the package"],["alc","À la carte"]].map(([k,l])=>`<button data-scf="${k}" aria-selected="${svcFilter===k}">${l}</button>`).join("")}</div></div>
    <div id="catBody"></div>`;
   const draw=()=>{const q=$("#catQ").value.toLowerCase().trim().split(/\s+/).filter(Boolean);
     const G=Object.values(CAT.forms).map(g=>({g,L:sitsOf(g.id)})).filter(x=>x.L.length)
@@ -1582,7 +1587,7 @@ function renderSvcTable(){
   $("#catBody").addEventListener("click",e=>{const c=e.target.closest("[data-form]");if(c)openForm(c.dataset.form)});
   $("#catBody").addEventListener("keydown",e=>{const c=e.target.closest("[data-form]");if(c&&(e.key==="Enter"||e.key===" ")){e.preventDefault();openForm(c.dataset.form)}});
   $("#catQ").addEventListener("input",draw);draw();
-  $("#minFee").addEventListener("change",e=>{S.minFee=Math.max(0,num(e.target.value));save();draw();toast("Minimum annual fee set to "+money(S.minFee)+" (or the Standard price, if higher)")});
+  $("#minFee").addEventListener("change",e=>{S.minFee=Math.max(0,num(e.target.value));save();draw();toast("Proposal minimum set to "+money(S.minFee))});
   $("#addSvc").addEventListener("click",()=>editService(null));
   $("#resetCat").addEventListener("click",()=>{if(!confirm("Replace every service and package price with the workbook values? Your catalog edits will be lost."))return;CAT=baseCatalog();reindex();saveCat();renderCatalog();toast("Workbook catalog restored")});
 }
@@ -1591,7 +1596,7 @@ function tierSpark(t,std){const n=t.pct.length;if(n<2)return `<span class="sc-fl
   return `<span class="sc-spark" aria-hidden="true">${t.pct.map((x,i)=>`<i class="t${i+1}" style="height:${Math.max(18,Math.round(num(x)/mx*100))}%"></i>`).join("")}</span><span>${n} tiers on ${esc(String(CAT.units[t.unit]?.count||t.unit).toLowerCase())} · ${money(std*Math.min(...t.pct.map(num)),0)} at T${n}</span>`}
 function formCard(g,L){const pr=L.map(x=>num(x.lv[0].rec)),lo=Math.min(...pr),hi=Math.max(...pr);
   return `<div class="svc-card" data-form="${esc(g.id)}" role="button" tabindex="0" aria-label="Open ${esc(g.label)} ${esc(g.name)}">
-    <div class="sc-top"><span class="sc-forms">${esc(g.label)}</span>${L.some(x=>x.pkg)?`<span class="sc-pk on">Package</span>`:""}</div>
+    <div class="sc-top"><span class="sc-forms">${esc(g.label)}</span>${PKG_ON&&L.some(x=>x.pkg)?`<span class="sc-pk on">Package</span>`:""}</div>
     <div class="sc-name">${esc(g.name)}</div>
     <div class="sc-foot"><span>${L.length>1?L.length+" situations":esc(L[0].freq||"")}</span><b>${lo===hi?money(lo):money(lo)+"–"+money(hi)}</b></div></div>`}
 function formEditor(fid){
@@ -1607,15 +1612,15 @@ function formEditor(fid){
       <div class="field"><label>Category</label><select data-g="cat">${cats.map(c=>`<option value="${esc(c)}" ${c===g.cat?"selected":""}>${esc(String(c).replace(/^[A-Z]\.\s*/,""))}</option>`).join("")}</select></div>
       <div class="field" style="grid-column:1/-1"><label>What the form is for</label><textarea data-g="desc" rows="3">${esc(g.desc||"")}</textarea></div>
      </div></section>
-     <section class="ed-sec s-tier"><h4>Situations <span class="note">each one has its own price, frequency, unit, tiers and billing — pick the situation on a proposal</span></h4>
-      <div class="table-wrap"><table class="tier-tbl sit-tbl"><thead><tr><th>Situation</th><th>Filing</th><th>Frequency</th><th>Unit</th><th class="r">Standard</th><th>Billing</th><th>Tiers</th><th></th></tr></thead><tbody id="fmSits"></tbody></table></div>
+     <section class="ed-sec s-tier"><h4>Situations <span class="note">each one has its own price, frequency, unit and tiers — pick the situation on a proposal</span></h4>
+      <div class="table-wrap"><table class="tier-tbl sit-tbl"><thead><tr><th>Situation</th><th>Filing</th><th>Frequency</th><th>Unit</th><th class="r">Standard</th>${PKG_ON?"<th>Billing</th>":""}<th>Tiers</th><th></th></tr></thead><tbody id="fmSits"></tbody></table></div>
       <button class="btn small" type="button" id="fmAdd" style="margin-top:10px">+ Add a situation</button></section>
     </div>
     <footer><span style="flex:1"></span><button class="btn" value="cancel">Close</button><button class="btn primary" value="save">Save form</button></footer></form>`;
   document.body.appendChild(dlg);
   const draw=()=>{if(!CAT.forms[fid]){dlg.close();return}dlg.querySelector("#fmSits").innerHTML=sitsOf(fid).map(sv=>`<tr data-sit="${sv.n}" tabindex="0" class="sit-row">
       <td><b>${esc(sv.sit||sv.name)}</b><div class="note">#${sv.n}</div></td><td>${esc(sv.method||"Unknown")}</td><td>${esc(sv.freq||"")}</td><td>${esc(sv.unit)}</td><td class="r"><b>${money(sv.lv[0].rec)}</b></td>
-      <td>${sv.pkg?`<span class="sc-pk on">Package</span>`:"À la carte"}</td><td>${sv.tiers&&sv.tiers.pct.length>1?sv.tiers.pct.length+" tiers":"—"}</td><td><button class="btn small" type="button">Edit</button></td></tr>`).join("")};
+      ${PKG_ON?`<td>${sv.pkg?`<span class="sc-pk on">Package</span>`:"À la carte"}</td>`:""}<td>${sv.tiers&&sv.tiers.pct.length>1?sv.tiers.pct.length+" tiers":"—"}</td><td><button class="btn small" type="button">Edit</button></td></tr>`).join("")};
   const saveG=()=>{const v=k=>dlg.querySelector(`[data-g="${k}"]`).value;g.label=v("label").trim()||g.label;g.name=v("name").trim()||g.name;g.desc=v("desc");g.cat=v("cat");
     CAT.services.forEach(x=>{if(x.form===fid)x.cat=g.cat});saveCat()};
   const open=n=>{saveG();editService(n,{onDone:draw})};
@@ -1661,9 +1666,8 @@ function editService(n,opt={}){
      <div class="ed-row">
       <section class="ed-sec s-price"><h4>Fees</h4><div class="grid g2">
        <div class="field"><label><b>Standard price per unit ($)</b></label><input data-std2 type="number" min="0" step="any" value="${esc(s.lv[0].rec)}" aria-label="Standard price"></div>
-       <div class="field"><label>Minimum annual fee</label><div style="padding:8px 0;font-weight:600" id="edMin">${money(minOf(s))}</div></div>
        ${inp("Expedite fee — flat, per service ($)","exp",num(s.exp),"number")}${inp("RRC state fee per filing ($)","state",s.state,"number")}</div>
-       <p class="note">Annual fee = units × times a year (frequency) × Standard at the filing's tier × the client's discretionary factor, at least the greater of ${money(minFee())} or the Standard price. The expedite fee is a flat add-on when the client asks for rush handling. Change the ${money(minFee())} floor in the catalog toolbar or Settings.</p></section>
+       <p class="note">Annual fee = units × times a year (frequency) × Standard at the filing's tier × the client's discretionary factor. A proposal whose professional fees come to less than ${money(minFee())} is raised to that minimum. The expedite fee is a flat add-on when the client asks for rush handling. Change the minimum in the catalog toolbar or Settings.</p></section>
       <section class="ed-sec s-work"><h4>Who does the work</h4><div class="grid g3">
        ${sel("Prepared by","prep",s.prep,["Preparer","Senior","Director"])}${sel("Reviewed by","rev",s.rev,["Preparer","Senior","Director"])}
        <div class="field"><label>Reviewer share of pay (%)</label><input data-k="rs" type="number" step="any" value="${(s.rs*100).toFixed(1)}"></div></div></section>
@@ -1678,7 +1682,7 @@ function editService(n,opt={}){
       <label class="tier-copy"><input type="checkbox" data-k="tcopy"> <span id="tcTxt"></span></label>
       <p class="note" style="margin:6px 0 0">The client's count of the unit picks the tier. <b>Per unit</b>: every unit is charged the tier's price (Tier 1 is the Standard price). <b>Flat fee for the tier</b>: one fee covers all the units in that tier. Prices are before the client's discretionary factor, the engagement discount and the minimum.</p>
      </section>
-     <section class="ed-sec s-pkg"><h4>Package</h4>
+     <section class="ed-sec s-pkg ${PKG_ON?"":"hidden"}"><h4>Package</h4>
       <div class="grid g4">
        <div class="field span2"><label>Package</label><select data-k="pkgcomp">
          <option value="">À la carte — billed per filing at catalog price</option>
@@ -1879,29 +1883,28 @@ function renderMethod(){
   const tick=b=>b?`<span class="yes" aria-label="Yes">●</span>`:`<span class="no" aria-label="No">○</span>`;
   v.innerHTML=`<div class="method">
    <header class="m-hero"><h1>How we price regulatory and permitting work</h1>
-    <p>Every fee is built from the same inputs — what is filed, how many units there are, the client's volume of that unit, which sets its tier, and a discretionary factor set for each client. Every monthly, quarterly, semi-annual and annual filing goes into one package, the <strong>${esc(PKG_NAME)}</strong>, for one fixed annual fee priced below buying the same filings one at a time. One-time and as-needed filings are à la carte.</p></header>
+    <p>Every fee is built from the same inputs — what is filed, how many units there are, the client's volume of that unit, which sets its tier, and a discretionary factor set for each client.${PKG_ON?"":" Every service is priced à la carte, and each proposal carries a minimum of "+money(minFee())+" in professional fees."}${PKG_ON?` Every monthly, quarterly, semi-annual and annual filing goes into one package, the <strong>${esc(PKG_NAME)}</strong>, for one fixed annual fee priced below buying the same filings one at a time. One-time and as-needed filings are à la carte.`:""}</p></header>
 
    <section class="m-sec ms-fil"><h2>Filings and projects</h2>
-    <p class="m-lede">Every service is priced as an annual fee: the times it is filed a year (from its frequency) × the client's units × the Standard price at the filing's tier × the client's discretionary factor (100% unless we set a discount or premium for that client). Each service has a minimum annual fee — the greater of ${money(minFee())} or its Standard price. On à la carte services, a flat expedite fee can be added for rush handling. The package is billed monthly at one-twelfth of the annual fee; à la carte services are billed 100% upfront, or 50% upfront and 50% on completion.</p>
+    <p class="m-lede">Every service is priced as an annual fee: the times it is filed a year (from its frequency) × the client's units × the Standard price at the filing's tier × the client's discretionary factor (100% unless we set a discount or premium for that client). A proposal whose professional fees total less than ${money(minFee())} is raised to that minimum. On à la carte services, a flat expedite fee can be added for rush handling. ${PKG_ON?"The package is billed monthly at one-twelfth of the annual fee; à la carte services are billed":"Services are billed"} 100% upfront, or 50% upfront and 50% on completion.</p>
     <div class="m-fig">${formula}</div>
-    <p class="m-example">Example: #${ex.n} ${esc(ex.name)} (${esc(ex.freq||"")}, × ${perYear(ex)} a year) — Standard ${money(exStd)} ${esc(ex.unit.toLowerCase())}; four units is <strong>${money(Math.max(minOf(ex),perYear(ex)*exStd*exQty))}</strong> a year; for a client with a 110% factor, <strong>${money(Math.max(minOf(ex),perYear(ex)*exStd*exQty)*1.1)}</strong>${exExp?`; expedited, add a flat ${money(exExp)}`:""}.</p>
+    <p class="m-example">Example: #${ex.n} ${esc(ex.name)} (${esc(ex.freq||"")}, × ${perYear(ex)} a year) — Standard ${money(exStd)} ${esc(ex.unit.toLowerCase())}; four units is <strong>${money(perYear(ex)*exStd*exQty)}</strong> a year; for a client with a 110% factor, <strong>${money(perYear(ex)*exStd*exQty*1.1)}</strong>${exExp?`; expedited, add a flat ${money(exExp)}`:""}.</p>
    </section>
 
    <section class="m-sec ms-cx"><h2>Discretionary factor</h2>
-    <p class="m-lede">Each client's proposal carries one discretionary factor. At 100% the client pays catalog prices. Below 100% is a discount — for example 90% for a strategic or long-standing client. Above 100% is a premium — for example 115% for a client whose work is harder: several affiliates or P-5s, poor data, frequent changes or an enforcement history. The factor scales every professional fee on the proposal, including minimums, but not RRC state fees, third-party costs or expedite fees. Prices on the client's proposal already include it.</p></section>
+    <p class="m-lede">Each client's proposal carries one discretionary factor. At 100% the client pays catalog prices. Below 100% is a discount — for example 90% for a strategic or long-standing client. Above 100% is a premium — for example 115% for a client whose work is harder: several affiliates or P-5s, poor data, frequent changes or an enforcement history. The factor scales every professional fee on the proposal, but not RRC state fees, third-party costs or expedite fees. Prices on the client's proposal already include it.</p></section>
 
    <section class="m-sec two ms-unit"><div><h2>Unit drivers</h2>
     <p class="m-lede">Every form is priced on the unit that drives the work, so the fee scales with the job.</p>
     <ul class="m-units">${topUnits.map(([u,n])=>`<li><strong>${esc(u)}</strong><span>${n} service${n>1?"s":""}</span></li>`).join("")}</ul></div>
-    <div><h2>Minimum annual fee</h2><p class="m-lede">Every service has a minimum annual fee of the greater of ${money(minFee())} or its Standard price. #${p4?p4.n:""} ${p4?esc(p4.forms):""}: ${money(p4Std)} per lease at Standard, so small clients are lifted to ${money(p4Min)}; larger ones price per lease.</p>
-    <div class="m-fig">${mbar}</div></div></section>
+    <div><h2>Minimum per proposal</h2><p class="m-lede">Each proposal carries a minimum of ${money(minFee())} in professional fees. If the services on a proposal add up to less, the proposal is raised to ${money(minFee())}; above it, nothing changes. RRC state fees and third-party costs are on top. Set the minimum in Settings or the catalog toolbar.</p></div></section>
 
    <section class="m-sec ms-pkg"><h2>Volume tiers</h2>
     <p class="m-lede">Each filing has its own volume tiers — up to five — based on the client's count of a unit chosen for that filing, such as operated wells, leases or permits. The count sets the tier. Each tier is either a price per unit — a percentage of the Standard price — or one flat fee for the tier, whatever the number of units in it. Tiers are set in each filing's detail in the Service catalog.</p>
     <div class="m-fig">${stair}</div>
     <p class="m-example">#${tex.n} ${esc(tex.name)} — Standard ${money(tStd)} ${esc(tex.unit.toLowerCase())}, stepping to ${tr.pct.map(x=>Math.round(num(x)*100)+"%").join(" / ")} as ${esc((tr.count||"").toLowerCase())} pass ${tr.bp.join(", ")||"—"}.</p>
    </section>
-   <section class="m-sec ms-pkg"><h2>${esc(PKG_NAME)}</h2>
+${PKG_ON?`   <section class="m-sec ms-pkg"><h2>${esc(PKG_NAME)}</h2>
     <p class="m-lede">The package holds every monthly, quarterly, semi-annual and annual filing — P-5 renewal and the compliance calendar, inactive-well filings, PR and well tests, P-18, R-3 and T-1, critical-infrastructure filings, H-10s, waste-hauler and T-4 renewals. Each is priced on the client's count of its unit × the times it is filed a year (for example W-3X per inactive well, once a year; PR per operator, 12 a year) × Standard at tier × the client factor, less the engagement discount, at least its minimum — added up into one annual fee billed monthly.</p>
     <div class="m-fig">${flow}</div>
     <p class="m-lede">Everything else — new permits, completions, plugging, registrations and set-ups, amendments, changes, waivers, tests and event reports — is à la carte: units × the tiered price × the client factor, at least its minimum, plus an optional flat expedite fee.</p></section>
@@ -1911,10 +1914,11 @@ function renderMethod(){
     <div class="m-fig">${eng}</div>
     <p class="m-example">Current engagement discount: ${pct(E[0]).replace(".0","")} below à la carte, taken off each filing in the package. Set it in Settings.</p></section>
 
+`:""}
    <section class="m-sec ms-sum"><h2>What drives each price</h2>
-    <table class="m-table"><thead><tr><th></th><th>Form or service</th><th>Unit driver</th><th>Tier</th><th>Client factor</th><th>Engagement</th></tr></thead><tbody>
-     <tr><td><strong>Filings and projects</strong></td><td>${tick(1)} Standard price</td><td>${tick(1)} quantity × price, minimum per order</td><td>${tick(1)} tier from the client's count of the unit</td><td>${tick(1)} discount or premium set per client, plus optional expedite fee</td><td>${tick(0)} none — billed at catalog price</td></tr>
-     <tr><td><strong>${esc(PKG_NAME)}</strong></td><td>${tick(1)} the recurring filings included</td><td>${tick(1)} yearly quantity from asset counts</td><td>${tick(1)} tier per filing</td><td>${tick(1)} same factor</td><td>${tick(1)} discount below à la carte</td></tr>
+    <table class="m-table"><thead><tr><th></th><th>Form or service</th><th>Unit driver</th><th>Tier</th><th>Client factor</th>${PKG_ON?"<th>Engagement</th>":""}</tr></thead><tbody>
+     <tr><td><strong>Filings and projects</strong></td><td>${tick(1)} Standard price</td><td>${tick(1)} units × times a year × price</td><td>${tick(1)} tier from the client's count of the unit</td><td>${tick(1)} discount or premium set per client, plus optional expedite fee</td>${PKG_ON?`<td>${tick(0)} none — billed at catalog price</td>`:""}</tr>
+${PKG_ON?`     <tr><td><strong>${esc(PKG_NAME)}</strong></td><td>${tick(1)} the recurring filings included</td><td>${tick(1)} yearly quantity from asset counts</td><td>${tick(1)} tier per filing</td><td>${tick(1)} same factor</td><td>${tick(1)} discount below à la carte</td></tr>`:""}
     </tbody></table>
     <p class="m-example">Passed through at cost and not part of our fees: RRC state filing fees (plus a ${pct(S.handling).replace(".0","")} handling fee) and third-party costs such as publication, certified mail and engineering.</p></section>
   </div>`;
@@ -2017,14 +2021,14 @@ function renderPhilosophy(){
     <line x1="${gx}" y1="${gy+gh}" x2="${gx+gw}" y2="${gy+gh}" stroke="#102B38"/>
     <text x="${gx+gw/2}" y="${gy+gh+62}" text-anchor="middle" class="t2" style="font-weight:600;fill:#102B38">Work completed in a month, as a share of target (labor dollars earned from accepted filings)</text>
   </svg>`;
-  const cmp=[["What the client buys","Hours, whatever they turn out to be","A defined filing or package at a quoted price"],
+  const cmp=[["What the client buys","Hours, whatever they turn out to be","A defined filing at a quoted price"],
    ["How the price is set","Hours × rate, known only after the work","Form × complexity × units, known before the work"],
    ["Who carries inefficiency","The client — slow work costs more","The firm — so we are motivated to improve"],
    ["When the team gets faster","Revenue falls","Margin rises, and so can pay"],
    ["What staff do every day","Log, code and justify time in six-minute pieces","Do the work; completed filings are the record"],
    ["How pay relates to output","Salary regardless of output","Pay is the labor share of the fees earned"],
    ["What a strong performer gains","Recognition, maybe","More completed work, more earned pay"],
-   ["Client experience","Surprise invoices, write-offs, disputes","Fixed quotes, one package for recurring work, rewards for more engagement"],
+   ["Client experience","Surprise invoices, write-offs, disputes","Fixed quotes, lower prices at higher volumes"],
    ["Planning the business","Utilization reports, timesheet chasing","Earned dollars per person, visible capacity"]];
   v.innerHTML=`<div class="method philo">
    <header class="m-hero ph-hero"><h1>Price the work,<br><span class="nowrap">not the clock</span></h1>
@@ -2056,7 +2060,7 @@ function renderPhilosophy(){
 
    <section class="m-sec ph-who"><h2>What each group gains</h2>
     <div class="who">
-     <div class="who-c c1"><h3>Clients</h3><ul><li>A price before the work starts, not an invoice after it.</li><li>Fees tied to their filings, assets and volume — easy to understand and budget.</li><li>One package for every recurring filing, priced below buying the filings one at a time, with lower prices at higher volumes.</li><li>No write-off negotiations or disputed hours.</li></ul></div>
+     <div class="who-c c1"><h3>Clients</h3><ul><li>A price before the work starts, not an invoice after it.</li><li>Fees tied to their filings, assets and volume — easy to understand and budget.</li><li>Lower prices at higher volumes, through volume tiers on each filing.</li><li>No write-off negotiations or disputed hours.</li></ul></div>
      <div class="who-c c2"><h3>Our team</h3><ul><li>No more logging, coding or defending time.</li><li>Pay that grows with the work they complete.</li><li>A clear view of what each filing earns and what it takes to earn their salary.</li><li>Recognition for expertise: complex work earns more because it is priced higher.</li></ul></div>
      <div class="who-c c3"><h3>The firm</h3><ul><li>Margin set by design on every fee, not recovered through utilization.</li><li>Efficiency gains that stay in the business instead of shrinking invoices.</li><li>Capacity measured in earned dollars, so hiring follows the work.</li><li>A pricing catalog that can be quoted by anyone, consistently.</li></ul></div>
     </div></section>
@@ -2077,7 +2081,7 @@ function renderPhilosophy(){
      <li><strong>Start with Permitting.</strong> Launch the new service line on value pricing from day one — no legacy hourly clients to convert.</li>
      <li><strong>Log throughput, not time.</strong> Record completed filings for 90 days to see what each person really earns against target.</li>
      <li><strong>Design the pay plan.</strong> Base salary plus a share of earned labor dollars above target, paid on accepted work.</li>
-     <li><strong>Extend to the rest of the firm.</strong> Move existing clients to catalog pricing and the package at renewal.</li>
+     <li><strong>Extend to the rest of the firm.</strong> Move existing clients to catalog pricing at renewal.</li>
     </ol></section>`:""}
   </div>`;
 }
@@ -2673,10 +2677,10 @@ function renderSettings(){
     ${f("Gross margin target (%)","gm",(S.gm*100).toFixed(1),"number")}
     ${f("Handling fee on RRC state fees (%)","handling",(S.handling*100).toFixed(1),"number")}
     ${f("Standard reviewer share of the labor pool (%)","subrs",(S.subrs*100).toFixed(1),"number")}
-    ${f("Minimum annual fee per service ($) — or the Standard price, if higher","minFee",S.minFee,"number")}</div>
-    <p class="note">Labor pool = 100% − gross margin target. The standard split is used for package work and on the Pricing philosophy page. Each filing also has its own reviewer share in the Service catalog; use the button to set every service to the standard split.</p>
+    ${f("Minimum professional fees per proposal ($)","minFee",S.minFee,"number")}</div>
+    <p class="note">Labor pool = 100% − gross margin target. The standard split is used on the Pricing philosophy page. Each filing also has its own reviewer share in the Service catalog; use the button to set every service to the standard split.</p>
     <button class="btn small" id="applyRs" style="margin-top:6px">Apply the standard split to all services</button></section>
-   <section class="panel" style="max-width:900px"><h3>Package engagement discount <span class="hint">Keeps the ${esc(PKG_NAME)} below buying its filings à la carte</span></h3>
+   <section class="panel ${PKG_ON?"":"hidden"}" style="max-width:900px"><h3>Package engagement discount <span class="hint">Keeps the ${esc(PKG_NAME)} below buying its filings à la carte</span></h3>
     <label style="display:flex;gap:8px;align-items:center;margin-bottom:12px"><input type="checkbox" id="pkgCap" ${S.pkgCap?"checked":""} style="width:auto"> Cap the package at its à la carte value less the engagement discount</label>
     <div class="grid g3">${PKGS.map((l,i)=>`<div class="field"><label>${esc(PKN(l))} (% below à la carte)</label><input data-eng="${i}" type="number" step="any" value="${(S.engage[i]*100).toFixed(1)}"></div>`).join("")}</div>
     <p class="note">If the package's tier price is already lower, it is kept. Sent and accepted proposals keep the rates they were sent with.</p></section>
