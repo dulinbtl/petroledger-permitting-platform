@@ -675,7 +675,7 @@ table.cat tr.grp td{background:var(--mist);font-family:var(--display);font-weigh
   .topbar .app-name{display:none}.topbar{gap:10px;padding:0 12px}.topbar img{height:26px}.nav{overflow-x:auto}.nav button{padding:8px;white-space:nowrap}
 }
 @media print{
-  @page{size:letter;margin:.55in}
+  @page{size:letter;margin:0} /* no browser header/footer (date, title, URL); page margins come from the wrapper table */
   body{background:#fff}
   .topbar,.rail,.doc-head,.doc-actions,.toast{display:none!important}
   .workspace{display:block}.main{padding:0}
@@ -683,7 +683,15 @@ table.cat tr.grp td{background:var(--mist);font-family:var(--display);font-weigh
   .sheet .inner{padding:0}
   .sheet .band{display:none}
   tr,.pk{break-inside:avoid}
+  #plSave,#plNotice,#plSyncOverlay{display:none!important}
+  table.pwrap{width:100%;border-collapse:collapse}
+  table.pwrap>thead{display:table-header-group}table.pwrap>tfoot{display:table-footer-group}
+  table.pwrap>thead .pg-space,table.pwrap>tfoot .pg-space{height:.55in}
+  table.pwrap>tbody>tr{break-inside:auto}
+  table.pwrap>tbody>tr>td{padding:0 .6in}
 }
+table.pwrap{width:100%;border-collapse:collapse;border:0;margin:0}table.pwrap td{padding:0;border:0;background:none}
+table.pwrap>thead,table.pwrap>tfoot{display:none}
 </style>
 </head>
 <body>
@@ -1554,6 +1562,7 @@ function renderDoc(p){
   const f=S.firm;
   let n=0; const H=title=>`<h2><span class="n">${++n}</span>${title}</h2>`;
   $("#tabBody").innerHTML=`<div class="doc-actions"><button class="btn" id="copyText">Copy SOW text</button><button class="btn primary" id="printDoc">Print or save as PDF</button></div>
+  <table class="pwrap" role="presentation"><thead><tr><td><div class="pg-space"></div></td></tr></thead><tfoot><tr><td><div class="pg-space"></div></td></tr></tfoot><tbody><tr><td>
   <article class="sheet"><div class="band"></div><div class="inner">
    <div class="masthead"><img src="${LOGO}" alt="PetroLedger Energy Partners"><div class="from">${esc(f.name)}${f.address?"<br>"+esc(f.address):""}${f.phone?"<br>"+esc(f.phone):""}${f.email?"<br>"+esc(f.email):""}</div></div>
    <h1>Proposal and statement of work<br>for regulatory and permitting services</h1>
@@ -1610,8 +1619,10 @@ function renderDoc(p){
    <p>Signing below authorizes the services and fees in this proposal.</p>
    <div class="sign"><div>${esc(p.client.name)} — signature, name, title and date</div><div>${esc(f.name)} — signature, name, title and date</div></div>
    <div class="foot"><span>${esc(f.name)} · Proposal ${esc(p.prop.number)}</span><span>Confidential</span></div>
-  </div></article>`;
-  $("#printDoc").addEventListener("click",()=>window.print());
+  </div></article>
+  </td></tr></tbody></table>`;
+  $("#printDoc").addEventListener("click",()=>{const t0=document.title;document.title=["Proposal",p.prop.number,p.client.name].filter(Boolean).join(" – ");
+    const back=()=>{document.title=t0;window.removeEventListener("afterprint",back)};window.addEventListener("afterprint",back);window.print();setTimeout(back,1500)});
   $("#copyText").addEventListener("click",()=>{const txt=$(".sheet").innerText;navigator.clipboard?.writeText(txt).then(()=>toast("SOW text copied"),()=>toast("Copy is blocked in this browser — select the text instead"))});
 }
 
