@@ -2170,7 +2170,7 @@ function renderPhilosophy(){
 }
 
 /* ---------- action items: sub-tabs and assignments ---------- */
-let actTab="gaps", asgGroup="meeting", asgFilter={status:"open",who:"",q:""};
+let actTab="assign", asgGroup="meeting", asgFilter={status:"open",who:"",q:""};
 function tlFromAssign(a){if(!a.tlId||!Array.isArray(ACT.timeline))return;const t=ACT.timeline.find(x=>x.id===a.tlId);if(!t)return;
   t.name=a.text||t.name;if(a.to)t.owner=a.to;if(a.due){t.end=a.due;if(t.ms)t.start=a.due;if(t.start>t.end)t.start=t.end}
   if(a.done)t.status="Done";else if(t.status==="Done")t.status="In progress"}
@@ -2187,9 +2187,9 @@ function renderAssign(){
   ACT.assign=ACT.assign||[];
   const v=$("#view-actions"), A=ACT.assign, open=A.filter(a=>!a.done), over=open.filter(a=>dueState(a).c==="over").length, soon=open.filter(a=>dueState(a).c==="soon").length;
   const lastMeeting=ACT.lastMeeting||today();
-  v.innerHTML=`<div class="doc-head"><div><h1>Action Items &amp; Info Needed</h1><div class="sub">Assignments to individuals from our weekly rollout meetings — use this list as the reference at each meeting.</div></div>
+  v.innerHTML=`<div class="doc-head"><div><h1>Action Items</h1><div class="sub">Assignments to individuals from our weekly rollout meetings and the Timeline — use this list as the reference at each meeting.</div></div>
     <div class="act-prog"><span><b>${open.length}</b> open · <b style="color:#B5452F">${over}</b> overdue · <b style="color:#8A6A2C">${soon}</b> due within 7 days</span><div class="bar"><i style="width:${A.length?(A.length-open.length)/A.length*100:0}%;background:#2F7D55"></i></div></div></div>
-   ${actSubTabs()}
+   
    <div class="who-strip">${PEOPLE().map(p=>{const mine=open.filter(a=>a.to===p),o=mine.filter(a=>dueState(a).c==="over").length;return `<button class="who-card ${asgFilter.who===p?"on":""}" data-who="${esc(p)}"><b>${esc(p)}</b><span>${mine.length} open${o?` · <em>${o} overdue</em>`:""}</span></button>`}).join("")}</div>
    <section class="panel act-add asg-add"><h3>Add an assignment</h3>
     <div class="asg-form">
@@ -2515,7 +2515,7 @@ let actFilter={status:"open",cat:"",q:""};
 const ACT_CATS=()=>[...new Set(["Pricing","Systems & processes","People","Market & data"].concat(ACT.items.map(i=>i.cat)))];
 const ACT_PRI=["High","Medium","Low"];
 function renderActions(){
-  if(actTab==="assign")return renderAssign();
+  actTab="assign";return renderAssign(); // the separate "info needed" list is retired; its items stay in the data
   const v=$("#view-actions"), items=ACT.items, open=items.filter(i=>!i.done).length, done=items.length-open;
   v.innerHTML=`<div class="doc-head"><div><h1>Action Items &amp; Info Needed</h1><div class="sub">Gaps we need filled to complete the model. All items are assigned to the group managing the rollout of the permitting business. Add your own, or ask Claude to add items. Saved in this browser.</div></div>
     <div class="act-prog"><span><b>${open}</b> open · <b>${done}</b> done</span><div class="bar"><i style="width:${items.length?done/items.length*100:0}%;background:#2F7D55"></i></div></div></div>
