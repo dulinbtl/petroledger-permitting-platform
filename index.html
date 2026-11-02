@@ -608,6 +608,10 @@ table.cat tr.grp td{background:var(--mist);font-family:var(--display);font-weigh
 .wells-calc input[readonly]{background:#F3F6F8;color:var(--ink);font-weight:600;border-style:dashed}.wells-calc{margin-top:8px}
 .tl-from{font-size:11px;font-weight:700;padding:1px 8px;border-radius:10px;background:#102B38;color:#fff}
 /* timeline */
+.tl-who{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:0 7px 0 7px;border-radius:10px;background:#F1F1EE;color:#7A7A70;margin-right:4px;vertical-align:1px;white-space:nowrap}
+.tl-who.on{background:#EAF3EE;color:#1F5A3C;padding-left:2px}
+.tl-who.on i{font-style:normal;display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;background:#2F7D55;color:#fff;font-size:9px;font-weight:700}
+.tl-ini{position:absolute;top:50%;transform:translateY(-50%);z-index:5;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:#2F7D55;color:#fff;font-size:9.5px;font-weight:700;box-shadow:0 0 0 2px #fff}
 .tl-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}
 .tl-stat{background:#fff;border:1px solid var(--rule);border-radius:var(--r);padding:12px 16px;display:flex;flex-direction:column;gap:4px;border-top:4px solid #8FA3AD}
 .tl-stat span{font-size:12.5px;color:var(--slate);font-weight:500}
@@ -2338,16 +2342,19 @@ function renderTimeline(){
     const dates=t.ms?tlFmt(t.end,{weekday:"short",month:"short",day:"numeric"}):tlFmt(t.start)+" – "+tlFmt(t.end);
     const mark=t.ms?`<span class="tl-ms ${cls}" style="left:${pos(s+.5)};--c:${ws.c}" title="${esc(t.name)} · ${esc(dates)}"></span>`
       :`<span class="tl-bar ${cls}" style="left:${pos(s)};width:calc(${((e-s)/span*100).toFixed(3)}% - 2px);--c:${ws.c}" title="${esc(t.name)} · ${esc(dates)}"></span>`;
-    return `<div class="tl-row ${t.ms?"is-ms":""} ${cls}" data-tl="${esc(t.id)}" tabindex="0" role="button" aria-label="Edit: ${esc(t.name)}">
-      <div class="tl-lab"><span class="tl-name">${t.ms?"◆ ":""}${esc(t.name)}</span><span class="tl-sub">${esc(dates)} · ${esc(t.owner||"Unassigned")}${t.status!=="Not started"?` · <b class="tl-st ${cls}">${esc(cls==="risk"&&t.status!=="At risk"?"Overdue":t.status)}</b>`:""}</span></div>
-      <div class="tl-track">${grid}${mark}</div></div>`};
+    const person=t.owner&&PEOPLE().includes(t.owner), ini=person?t.owner.split(/\s+/).map(w=>w[0]).join("").slice(0,2).toUpperCase():"";
+    const who=person?`<span class="tl-who on" title="Assigned to ${esc(t.owner)} — on their Action Items"><i>${esc(ini)}</i>${esc(t.owner)}</span>`:`<span class="tl-who" title="Not assigned to a person">Unassigned${t.owner?" · "+esc(t.owner):""}</span>`;
+    const bub=person?`<span class="tl-ini" style="left:calc(${pos(t.ms?s+.5:e)} + ${t.ms?12:4}px)" title="${esc(t.owner)}">${esc(ini)}</span>`:"";
+    return `<div class="tl-row ${t.ms?"is-ms":""} ${cls} ${person?"assigned":""}" data-tl="${esc(t.id)}" tabindex="0" role="button" aria-label="Edit: ${esc(t.name)}${person?", assigned to "+esc(t.owner):", unassigned"}">
+      <div class="tl-lab"><span class="tl-name">${t.ms?"◆ ":""}${esc(t.name)}</span><span class="tl-sub">${who} ${esc(dates)}${t.status!=="Not started"?` · <b class="tl-st ${cls}">${esc(cls==="risk"&&t.status!=="At risk"?"Overdue":t.status)}</b>`:""}</span></div>
+      <div class="tl-track">${grid}${mark}${bub}</div></div>`};
   const groups=TL_WS.filter(w=>!tlWsFilter||w.id===tlWsFilter).map(w=>{const items=L.filter(t=>(TL_WS.some(x=>x.id===t.ws)?t.ws:"launch")===w.id).sort((a,b)=>tlDay(a.start)-tlDay(b.start)||a.ms-b.ms);
     return items.length?`<div class="tl-group" style="--c:${w.c}"><div class="tl-ghead"><span>${esc(w.name)}</span><button class="linkish" data-goview="${w.view}">Open ${esc(({catalog:"Service catalog",systems:"Systems",work:"Proposals",workload:"Workload",actions:"Action items"})[w.view])} →</button></div>${items.map(row).join("")}</div>`:""}).join("");
-  v.innerHTML=`<div class="doc-head"><div><h1>Roll-out timeline</h1><div class="sub">From today to the Permitting service line launch on ${tlFmt(TL_LAUNCH,{weekday:"long",month:"long",day:"numeric",year:"numeric"})}. Click any row to change its dates, owner or status. Changes save for everyone.</div></div></div>
+  v.innerHTML=`<div class="doc-head"><div><h1>Roll-out timeline</h1><div class="sub">From today to the Permitting service line launch on ${tlFmt(TL_LAUNCH,{weekday:"long",month:"long",day:"numeric",year:"numeric"})}. Click any row to change its dates, who it is assigned to, or its status. Changes save for everyone.</div></div></div>
    <div class="tl-stats">
     <div class="tl-stat launch"><span>${daysTo>0?"Days to launch":daysTo===0?"Launch day":"Days since launch"}</span><strong>${Math.abs(daysTo)}</strong><em>${Math.max(0,Math.ceil(daysTo/7))} weeks · Feb 1, 2027</em></div>
     <div class="tl-stat"><span>Next milestone</span><strong class="sm">${nextMs?esc(nextMs.name):"All milestones done"}</strong><em>${nextMs?tlFmt(nextMs.end,{weekday:"short",month:"short",day:"numeric"})+" · "+(tlDay(nextMs.end)-today===0?"today":"in "+(tlDay(nextMs.end)-today)+" days"):""}</em></div>
-    <div class="tl-stat"><span>Progress</span><strong>${done} <small>of ${L.length} done</small></strong><div class="bar"><i style="width:${L.length?done/L.length*100:0}%"></i></div></div>
+    <div class="tl-stat"><span>Progress</span><strong>${done} <small>of ${L.length} done</small></strong><div class="bar"><i style="width:${L.length?done/L.length*100:0}%"></i></div><em>${L.filter(t=>t.owner&&PEOPLE().includes(t.owner)).length} of ${L.length} assigned to a person</em></div>
     <div class="tl-stat ${risk?"bad":""}"><span>At risk or overdue</span><strong>${risk}</strong><em>${risk?"Shown in red below":"Nothing flagged"}</em></div>
    </div>
    <div class="act-tools tl-tools">
@@ -2366,7 +2373,7 @@ function renderTimeline(){
    <section class="panel tl-mslist"><h3>Milestones <span class="hint">Working back from launch</span></h3>
     <table class="tl-table"><thead><tr><th>Date</th><th>Milestone</th><th>Workstream</th><th>Assigned to</th><th>Status</th></tr></thead><tbody>
     ${msAll.slice().reverse().map(t=>{const ws=TL_WS.find(w=>w.id===t.ws)||TL_WS[4],dd=tlDay(t.end)-today,cls=tlStateCls(t);return `<tr data-tl="${esc(t.id)}" class="${cls}"><td><strong>${tlFmt(t.end,{weekday:"short",month:"short",day:"numeric"})}</strong><div class="note">${t.status==="Done"?"done":dd>0?"in "+dd+" days":dd===0?"today":Math.abs(dd)+" days ago"}</div></td>
-      <td><button class="linkish tl-open" data-tl-open="${esc(t.id)}">${esc(t.name)}</button></td><td><span class="tl-ws" style="--c:${ws.c}">${esc(ws.name)}</span></td><td>${esc(t.owner||"")}</td>
+      <td><button class="linkish tl-open" data-tl-open="${esc(t.id)}">${esc(t.name)}</button></td><td><span class="tl-ws" style="--c:${ws.c}">${esc(ws.name)}</span></td><td>${t.owner&&PEOPLE().includes(t.owner)?`<span class="tl-who on"><i>${esc(t.owner.split(/\s+/).map(w=>w[0]).join("").slice(0,2).toUpperCase())}</i>${esc(t.owner)}</span>`:`<span class="tl-who">Unassigned${t.owner?" · "+esc(t.owner):""}</span>`}</td>
       <td><select data-tlst="${esc(t.id)}" aria-label="Status" class="tl-sel ${cls}">${TL_STATUS.map(s=>`<option ${s===t.status?"selected":""}>${s}</option>`).join("")}</select></td></tr>`}).join("")}
     </tbody></table></section>`;
   v.querySelectorAll("[data-tlws]").forEach(b=>b.addEventListener("click",()=>{tlWsFilter=b.dataset.tlws;renderTimeline()}));
