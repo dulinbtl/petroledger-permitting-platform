@@ -1292,7 +1292,7 @@ function renderBuilder(p){
       <div class="field span2" style="grid-column:1/-1"><label for="f_intro">Opening note to the client (optional)</label><textarea id="f_intro" data-path="prop.intro" rows="2">${esc(p.prop.intro)}</textarea></div>
     </div></section>
 
-   <section class="panel b-counts"><h3>Counts by unit <span class="hint">Units for each service and the tier for every service on that unit</span></h3>
+   <section class="panel b-counts"><h3>Counts by unit <span class="hint">Sets the units on every service priced on that unit, and the tiers</span></h3>
     <div id="unitBox"></div></section>
    <section class="panel b-pk ${PKG_ON?"":"hidden"}"><h3>Package <span class="hint">The ${esc(PKG_NAME)} is billed monthly at one-twelfth of the annual fee; services outside it are à la carte</span></h3>
     <div class="pkgs" id="pkgBox"></div><div id="pkgDetail"></div></section>
@@ -1328,7 +1328,8 @@ function renderUnits(p,light){
     <div class="note">${esc(u.toLowerCase())}</div></div>`};
   box.innerHTML=`<h4 class="ugrp">Assets the operator runs</h4><div class="grid g4">${asset.map(fld).join("")}</div>
     <h4 class="ugrp">Filing volumes <span class="note">used for tiers — leave blank to use the units on this proposal</span></h4><div class="grid g4">${vol.map(fld).join("")}</div>`;
-  box.querySelectorAll("[data-ucount]").forEach(el=>el.addEventListener("input",()=>{p.counts=p.counts||{};const v=el.value.trim();if(v==="")delete p.counts[el.dataset.ucount];else p.counts[el.dataset.ucount]=num(v);touch(p,true)}));
+  box.querySelectorAll("[data-ucount]").forEach(el=>el.addEventListener("input",()=>{p.counts=p.counts||{};const u0=el.dataset.ucount,v=el.value.trim();if(v==="")delete p.counts[u0];else p.counts[u0]=num(v);
+    if(v!=="")syncLineUnits(p,u0);touch(p,true)}));
   numify(box);
 }
 function browseOptions(){
@@ -1372,12 +1373,16 @@ function renderPkgs(p){
   pd.querySelectorAll("[data-rr]").forEach(b=>b.addEventListener("click",()=>{delete (p.recOv||{})[b.dataset.rr];touch(p,true)}));
   pd.querySelectorAll("[data-rreset]").forEach(b=>b.addEventListener("click",()=>{p.recOv={};touch(p,true);toast("Recurring edits cleared")}));
 }
-function addLine(p,n){if(p.lock&&!p.lock.services[n])p.lock.services[n]=clone(SVC[n]);p.lines.push({id:uid(),n,level:"Standard",qty:1,override:null,tp:0,tpBilled:true});touch(p);renderLines(p);renderLedger(p);renderList();toast("Added #"+n+" "+SVC[n].forms);}
+// Counts by unit set the units on every service priced on that unit (including units calculated from it, e.g. oil wells).
+function syncLineUnits(p,changed){const U=UNITS(p);p.lines.forEach(l=>{const sv=getSvc(p,l.n);if(!sv)return;const u=sv.unit,d=U[u]&&U[u].derived;
+  if(u===changed||(d&&(d.from===changed||d.less===changed))){const c=unitCount(p,u);if(c>0||u===changed)l.qty=c}})}
+const countFor=(p,n)=>{const sv=getSvc(p,n)||SVC[n];if(!sv)return 1;const c=unitCount(p,sv.unit);return c>0?c:1};
+function addLine(p,n){if(p.lock&&!p.lock.services[n])p.lock.services[n]=clone(SVC[n]);p.lines.push({id:uid(),n,level:"Standard",qty:countFor(p,n),override:null,tp:0,tpBilled:true});touch(p);renderLines(p);renderLedger(p);renderList();toast("Added #"+n+" "+SVC[n].forms);}
 function renderLines(p,keepFocus){
   const box=$("#lines"); if(!box)return;
   if(keepFocus){ // update computed cells only
     p.lines.filter(l=>getSvc(p,l.n)).forEach(l=>{const c=calcLine(l,p),row=box.querySelector(`[data-line="${l.id}"]`);if(!row)return;
-      row.querySelector(".pu").innerHTML=puHTML(l,c);
+      row.querySelector(".pu").innerHTML=puHTML(l,c);const qi=row.querySelector('[data-f="qty"]');if(qi&&document.activeElement!==qi&&num(qi.value)!==num(l.qty))qi.value=fmtNum(l.qty);
       row.querySelector(".fe").innerHTML=money(c.fee)+(c.minApplied?"<small>minimum applied</small>":"");
       const ui=row.querySelector(".unitinfo");if(ui)ui.innerHTML=unitInfo(l,c);const uw=row.querySelector(".uw");if(uw)uw.textContent=unitWord(c.s.unit,l.qty);
       const t=row.querySelector(".mini");if(t)t.outerHTML=miniHTML(l,c);});
