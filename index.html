@@ -1835,7 +1835,9 @@ function editService(n,opt={}){
       if(isNew)CAT.services.push(out);else{const i=CAT.services.findIndex(x=>x.n===n);CAT.services[i]=out;if(newN!==n)P.forEach(p=>{if(!p.lock)p.lines.forEach(l=>{if(l.n===n)l.n=newN})})}
       ensureForms(CAT);const og=CAT.forms[out.form];
       if(og){og.cat=out.cat;CAT.services.forEach(x=>{if(x.form===og.id)x.cat=out.cat});if(sitsOf(og.id).length===1){og.name=out.name;if(out.forms!==s.forms)og.label=formLabel(out)}}
-      reindex();ensureUnits(CAT);syncSubs();saveCat();save();toast(isNew?(fg?"Situation added":"Form added"):"Saved #"+newN+(check()?"":" — check the flagged ranges"));
+      reindex();ensureUnits(CAT);syncSubs();
+      let moved=0;if(!isNew&&out.unit!==s.unit)P.forEach(p=>{if(p.lock)return;p.lines.forEach(l=>{if(l.n===newN){const c=unitCount(p,out.unit);if(c>0&&c!==num(l.qty)){l.qty=c;moved++}}})}); // units on draft proposals follow the new unit's count
+      saveCat();save();toast(isNew?(fg?"Situation added":"Form added"):"Saved #"+newN+(moved?` — units updated on ${moved} draft proposal line${moved>1?"s":""}`:"")+(check()?"":" — check the flagged ranges"));
       if(act==="addsit")addAfter=out.form;
     } else if(act==="delete"){
       const u=inUse(n); if(u){toast(`#${n} is used in ${u} draft proposal${u>1?"s":""} — remove it there first`);}
