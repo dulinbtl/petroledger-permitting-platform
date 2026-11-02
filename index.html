@@ -601,9 +601,10 @@ table.cat tr.grp td{background:var(--mist);font-family:var(--display);font-weigh
 .tier-copy{display:flex;gap:8px;align-items:center;font-size:13px;margin-top:8px}
 .tier-copy input{width:auto}
 .fct-tag{display:inline-block;font-size:11px;font-weight:600;padding:0 6px;border-radius:8px;background:#E3E8EB;color:#3B4A52;margin-left:4px}.fct-tag.disc{background:#EAF3EE;color:#1F5A3C}.fct-tag.prem{background:#F3E2BE;color:#6B4E14}
-.line-name .sitsel{margin-left:10px;font-size:12.5px;max-width:340px;vertical-align:1px;border:1px solid var(--rule);border-radius:4px;padding:2px 6px;background:#fff}
+.line-name .sitsel{width:auto;margin-left:10px;font-size:12.5px;max-width:340px;vertical-align:1px;border:1px solid var(--rule);border-radius:4px;padding:2px 6px;background:#fff}
 .sit-tbl tr.sit-row{cursor:pointer}.sit-tbl tr.sit-row:hover td{background:#F7F9FB}
 .bill-b{font-size:11.5px;font-weight:600;padding:0 6px;border-radius:8px;background:#E3E8EB;color:#3B4A52}.bill-b.b-monthly{background:#EDF2F8;color:#1E4152}.bill-b.b-split{background:#F3E2BE;color:#6B4E14}
+.billpick{display:inline-flex;align-items:center;gap:4px;margin-left:10px;font-size:11.5px;font-weight:600;color:var(--slate);vertical-align:1px}.billpick select{width:auto;max-width:240px;font-size:12px;border:1px solid var(--rule);border-radius:4px;padding:2px 4px;background:#fff}.billpick.b-monthly select{background:#EDF2F8}.billpick.b-split select{background:#FBF4E6}
 /* timeline */
 .tl-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}
 .tl-stat{background:#fff;border:1px solid var(--rule);border-radius:var(--r);padding:12px 16px;display:flex;flex-direction:column;gap:4px;border-top:4px solid #8FA3AD}
@@ -1214,7 +1215,7 @@ function calcLine(l,p){
   const credit=r=>(s.prep===r?prepPay:0)+(s.rev===r?revPay:0);
   const labor=credit("Preparer")+credit("Senior");
   const tp=num(l.tp), absorbed=l.tpBilled?0:tp;
-  return {s,...f,pk,bill:BILLS.includes(s.bill)?s.bill:defBill(s),expUnit:0,fee,net,state:qty*f.py*num(s.state),prepPay,revPay,prepRole:credit("Preparer"),senRole:credit("Senior"),dir:credit("Director"),labor,tp,absorbed,tpBilled:l.tpBilled?tp:0,gm:net-labor-absorbed};
+  return {s,...f,pk,bill:BILLS.includes(l.bill)?l.bill:BILLS.includes(s.bill)?s.bill:defBill(s),expUnit:0,fee,net,state:qty*f.py*num(s.state),prepPay,revPay,prepRole:credit("Preparer"),senRole:credit("Senior"),dir:credit("Director"),labor,tp,absorbed,tpBilled:l.tpBilled?tp:0,gm:net-labor-absorbed};
 }
 const getEng=p=>(p&&p.lock&&p.lock.engage)||{on:S.pkgCap,rates:S.engage};
 function calcPkgs(p){
@@ -1395,7 +1396,7 @@ function renderLines(p,keepFocus){
   if(!p.lines.length){box.innerHTML=`<div class="empty-lines">No services yet. Search above or browse by category to add the first one.</div>`;return}
   box.innerHTML=p.lines.filter(l=>getSvc(p,l.n)).map(l=>{const c=calcLine(l,p),s=c.s;return `<div class="line lv${lvIdx(l.level)}" data-line="${l.id}">
     <div class="line-top">
-      <div class="line-name"><span class="fn">#${s.n}</span>${esc(s.name)}${!p.lock&&s.form&&sitsOf(s.form).length>1?`<select class="cell-sel sitsel" data-sitsel aria-label="Situation">${sitsOf(s.form).map(x=>`<option value="${x.n}" ${x.n===s.n?"selected":""}>${esc(x.sit||x.name)}</option>`).join("")}</select>`:""}</div>
+      <div class="line-name"><span class="fn">#${s.n}</span>${esc(s.name)}${!p.lock&&s.form&&sitsOf(s.form).length>1?`<select class="cell-sel sitsel" data-sitsel aria-label="Situation">${sitsOf(s.form).map(x=>`<option value="${x.n}" ${x.n===s.n?"selected":""}>${esc(x.sit||x.name)}</option>`).join("")}</select>`:""}<label class="billpick b-${c.bill}" title="How this service is billed on this proposal">Billing <select data-billsel aria-label="Billing method">${BILLS.map(b=>`<option value="${b}" ${b===c.bill?"selected":""}>${BILL_LABEL[b]}${b===(BILLS.includes(s.bill)?s.bill:defBill(s))?" (catalog)":""}</option>`).join("")}</select></label></div>
       <div class="unitinfo">${unitInfo(l,c)}</div>
       <div class="uwrap"><input data-f="qty" type="number" min="0" step="any" value="${esc(fmtNum(l.qty))}" aria-label="Units"><small class="uw">${esc(unitWord(s.unit,l.qty))}</small></div>
       <div class="amt py" title="${esc(s.freq||"")}">× ${c.py}<small>${esc(s.freq||"")}</small></div>
@@ -1412,11 +1413,12 @@ function renderLines(p,keepFocus){
       const f=el.dataset.f; l[f]=el.type==="checkbox"?el.checked:(f==="level"?el.value:(el.value===""&&f==="override"?null:el.value));
       if(f==="level"||f==="tpBilled"||f==="exp"){touch(p);renderLines(p);renderLedger(p);renderList()}else touch(p,true)}));
     row.querySelector("[data-del]").addEventListener("click",()=>{p.lines=p.lines.filter(x=>x!==l);touch(p);renderLines(p);renderLedger(p);renderList()});
+    row.querySelector("[data-billsel]")?.addEventListener("change",e=>{const sv=getSvc(p,l.n),def=BILLS.includes(sv.bill)?sv.bill:defBill(sv);if(e.target.value===def)delete l.bill;else l.bill=e.target.value;touch(p);renderLines(p);renderLedger(p);renderList();toast("Billing: "+BILL_LABEL[e.target.value])});
     row.querySelector("[data-sitsel]")?.addEventListener("change",e=>{l.n=+e.target.value;touch(p);renderLines(p);renderLedger(p);renderList();toast("Situation changed")});
     row.querySelector("[data-tog]").addEventListener("click",()=>{open.has(l.id)?open.delete(l.id):open.add(l.id);renderLines(p)});
   });
 }
-function unitInfo(l,c){const s=c.s,pk=s.pkg;return `${esc(s.unit)}${c.tq&&c.tq.tier>1&&!c.tq.flat?` · <span class="tier-b t${c.tq.tier}">${esc(tierTxt(c.tq))}</span>`:""}${!pk||!PKG_ON?` · <span class="bill-b b-${c.bill}">billed ${esc(BILL_LABEL[c.bill].toLowerCase())}</span>`:" · also in the "+esc(PKG_NAME)}`}
+function unitInfo(l,c){const s=c.s,pk=s.pkg;return `${esc(s.unit)}${c.tq&&c.tq.tier>1&&!c.tq.flat?` · <span class="tier-b t${c.tq.tier}">${esc(tierTxt(c.tq))}</span>`:""}${!pk||!PKG_ON?"":" · also in the "+esc(PKG_NAME)}`}
 function puHTML(l,c){const ov=c.isOv;const parts=[];if(!ov&&c.tq.pct!==1)parts.push("T"+c.tq.tier);if(!ov&&c.fct!==1)parts.push((c.fct>1?"+":"−")+pct(Math.abs(c.fct-1)).replace(".0","")+" client");if(!ov&&c.pkRate)parts.push("−"+pct(c.pkRate).replace(".0",""));
   return money(c.price,(c.price%1)?2:0)+`<small>${c.isFlat?"flat fee for tier "+c.tq.tier:"per "+esc(unitWord(c.s.unit,1))}</small>`+(ov?"<small>override</small>":(parts.length?`<small>catalog ${money(c.listP)} · ${parts.join(" ")}</small>`:""))+(c.expFee?`<small>+ ${money(c.expFee)} expedite</small>`:"")}
 function detailHTML(l,c,p){const s=c.s;
