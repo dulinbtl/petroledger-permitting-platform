@@ -1054,6 +1054,22 @@ function migrateCat(cat){
       if(sv&&!sv.form){const id="g"+n;cat.forms[id]={id,label,name:sv.name,desc:"",cat:sv.cat};sv.form=id;sv.sit=""}});
     cat.v=14;
   }
+  if((cat.v||0)<15){ // Joe's client pricing (Red Highland, Empire, Warwick — Nov 2, 2026) for recurring filings
+    const by=n=>cat.services.find(x=>x.n===n);
+    const set=(n,o)=>{const sv=by(n);if(!sv)return null;Object.assign(sv,o.fields||{});if(o.std!=null){sv.lv[0].rec=o.std;sv.fee=o.std;sv.lv[0].lo=Math.min(num(sv.lv[0].lo),o.std);sv.lv[0].hi=Math.max(num(sv.lv[0].hi),o.std)}
+      if(o.tiers)sv.tiers=o.tiers;return sv};
+    set(2,{std:600,fields:{method:"Manual"},tiers:{unit:"Per well",bp:[200],pct:[1,1.25]}});
+    const pr=set(50,{std:5,fields:{unit:"Per lease",freq:"Monthly",method:"EDI",desc:"Monthly report of oil, gas and condensate production and disposition for every lease the operator runs, due to the RRC each month. Filed electronically (paper PRs are no longer accepted from September 1, 2026). Priced per lease per month."},tiers:{unit:"Per lease",bp:[100],pct:[1,0.56]}});
+    if(pr)pr.lv[0].scope="Monthly PR for each lease, filed by EDI";
+    set(51,{std:18,fields:{method:"EDI"},tiers:{unit:"Per well",bp:[200],pct:[1,0.8333]}});
+    set(65,{std:9,fields:{method:"EDI"},tiers:{unit:"Per well",bp:[200],pct:[1,0.8333]}});
+    const ci=set(36,{std:125,fields:{unit:"Per critical-infrastructure asset",freq:"Semi-annual",method:"Manual",sit:"Per critical asset, each filing window",name:"Form CI-D – Acknowledgment of Critical Customer/Critical Gas Supplier Designation (per critical asset)"},tiers:{unit:"Per critical-infrastructure asset",bp:[20],pct:[1,0.5]}});
+    if(ci){ci.lv[0].scope="CI-D with attachment listing each critical asset, both filing windows";cat.services=cat.services.filter(x=>x.n!==37)}
+    set(41,{std:250,fields:{method:"EDI"}});
+    const mc=set(46,{std:2500,fields:{freq:"Annual",name:"Monthly compliance monitoring (no RRC form)",desc:"Month-by-month monitoring of the operator's RRC compliance — deadlines, filing status, inactive-well and P-5 standing — with a monthly check-in. Priced as one annual fee."},tiers:{unit:"Per operator",bp:[],pct:[1]}});
+    if(mc)mc.lv[0].scope="Monthly monitoring and check-in for one operator";
+    cat.v=15;
+  }
   cat.services.forEach(normalizeSvc);
   ensureUnits(cat);
   syncSubs(cat);
@@ -1107,7 +1123,7 @@ P.forEach(p=>{
     if(!LEVELS.includes(l.level))l.level="Standard"});
   p.pkgLevel=p.pkgLevel||{};Object.keys(p.pkgLevel).forEach(k=>{if(p.pkgLevel[k]==="Simple")p.pkgLevel[k]="Standard";if(p.pkgLevel[k]==="Super Complex")p.pkgLevel[k]="Complex"});
   p.pkgs=p.pkgs||{};Object.values(p.recOv||{}).forEach(o=>{if(o&&o.level)delete o.level});
-  if(!p.lock)p.lines.forEach(l=>{const to={48:6,49:6,17:16}[l.n];if(to&&!SVC[l.n]&&SVC[to])l.n=to});
+  if(!p.lock)p.lines.forEach(l=>{const to={48:6,49:6,17:16,37:36}[l.n];if(to&&!SVC[l.n]&&SVC[to])l.n=to});
   if(!p.v11){
     const DU={WELLS:"Per well",GAS_WELLS:"Per gas well",INACTIVE:"Per inactive well",CI_ASSETS:"Per critical-infrastructure asset",VEHICLES:"Per vehicle",INJ_WELLS:"Per injection / disposal well",SWD_FAC:"Per disposal facility",PLANTS:"Per gas processing plant",T_SYS:"Per transportation / storage system",PIPE_PERMITS:"Per pipeline permit",PITS:"Per pit"};
     const c0=p.counts||{},c1={};Object.entries(c0).forEach(([k,v])=>{if(DU[k]){if(num(v))c1[DU[k]]=num(v)}else if(!/^[A-Z_]+$/.test(k))c1[k]=v});p.counts=c1;
