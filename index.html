@@ -605,6 +605,7 @@ table.cat tr.grp td{background:var(--mist);font-family:var(--display);font-weigh
 .sit-tbl tr.sit-row{cursor:pointer}.sit-tbl tr.sit-row:hover td{background:#F7F9FB}
 .bill-b{font-size:11.5px;font-weight:600;padding:0 6px;border-radius:8px;background:#E3E8EB;color:#3B4A52}.bill-b.b-monthly{background:#EDF2F8;color:#1E4152}.bill-b.b-split{background:#F3E2BE;color:#6B4E14}
 .billpick{display:inline-flex;align-items:center;gap:4px;margin-left:10px;font-size:11.5px;font-weight:600;color:var(--slate);vertical-align:1px}.billpick select{width:auto;max-width:240px;font-size:12px;border:1px solid var(--rule);border-radius:4px;padding:2px 4px;background:#fff}.billpick.b-monthly select{background:#EDF2F8}.billpick.b-split select{background:#FBF4E6}
+.wells-calc input[readonly]{background:#F3F6F8;color:var(--ink);font-weight:600;border-style:dashed}.wells-calc{margin-top:8px}
 /* timeline */
 .tl-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}
 .tl-stat{background:#fff;border:1px solid var(--rule);border-radius:var(--r);padding:12px 16px;display:flex;flex-direction:column;gap:4px;border-top:4px solid #8FA3AD}
@@ -748,7 +749,7 @@ const FREQS=["Monthly","Quarterly","Semi-annual","Annual","As needed","One-time"
 const RECUR=f=>["Monthly","Quarterly","Semi-annual","Annual"].includes(f);
 const pkgForFreq=f=>RECUR(f)?REC:"";
 const PKG_DESC={[REC]:"Every recurring filing — monthly, quarterly, semi-annual and annual — for one fixed annual fee billed monthly. Each filing is priced on the client's units × times a year. One-time and as-needed filings are à la carte."};
-const UNIT_LABEL={"Per CI-designated operator":"Critical-infrastructure designation (0 or 1)","Per waste-hauler permit":"Waste-hauler permits","Per inactive well over 25 years":"Inactive wells over 25 years old","Per well":"Operated wells","Per gas well":"Gas wells (of operated wells)","Per oil well":"Oil wells (operated − gas)","Per inactive well":"Inactive wells","Per critical-infrastructure asset":"Critical-infrastructure assets","Per vehicle":"Waste-hauler vehicles","Per injection / disposal well":"Injection / disposal wells","Per disposal facility":"Disposal facilities filing P-18","Per gas processing plant":"Gas processing plants","Per transportation / storage system":"Transportation / storage systems","Per pipeline permit":"Pipeline permits (T-4)","Per lease":"Leases","Per permit":"Drilling and other permits","Per filing":"Filings","Per exception":"Rule 37 / 38 exceptions","Per waiver":"Offset waivers","Per submission":"Pit submissions","Per pit":"Pits","Per pit group":"Pit groups","Per amendment":"Amendments","Per renewal":"Renewals","Per monthly report":"Monthly reports a year","Per application":"Applications","Per request":"Requests","Per report":"Reports","Per test":"Well tests (G-10)","Per permit action":"Permit actions","Per operator":"Operators / P-5s (usually 1)","Per engagement":"Engagements","Per memo":"Memos","Per month":"Months","Per hearing day":"Hearing days","Per operator/yr":"Operator-years","Per operator/month":"Operator-months"};
+const UNIT_LABEL={"Per active gas well":"Gas — active","Per inactive gas well":"Gas — inactive","Per active oil well":"Oil — active","Per inactive oil well":"Oil — inactive","Per CI-designated operator":"Critical-infrastructure designation (0 or 1)","Per waste-hauler permit":"Waste-hauler permits","Per inactive well over 25 years":"Inactive wells over 25 years old","Per well":"Operated wells","Per gas well":"Gas wells (of operated wells)","Per oil well":"Oil wells (operated − gas)","Per inactive well":"Inactive wells","Per critical-infrastructure asset":"Critical-infrastructure assets","Per vehicle":"Waste-hauler vehicles","Per injection / disposal well":"Injection / disposal wells","Per disposal facility":"Disposal facilities filing P-18","Per gas processing plant":"Gas processing plants","Per transportation / storage system":"Transportation / storage systems","Per pipeline permit":"Pipeline permits (T-4)","Per lease":"Leases","Per permit":"Drilling and other permits","Per filing":"Filings","Per exception":"Rule 37 / 38 exceptions","Per waiver":"Offset waivers","Per submission":"Pit submissions","Per pit":"Pits","Per pit group":"Pit groups","Per amendment":"Amendments","Per renewal":"Renewals","Per monthly report":"Monthly reports a year","Per application":"Applications","Per request":"Requests","Per report":"Reports","Per test":"Well tests (G-10)","Per permit action":"Permit actions","Per operator":"Operators / P-5s (usually 1)","Per engagement":"Engagements","Per memo":"Memos","Per month":"Months","Per hearing day":"Hearing days","Per operator/yr":"Operator-years","Per operator/month":"Operator-months"};
 const FREQ_N={Monthly:12,Quarterly:4,"Semi-annual":2,Annual:1,"One-time":1,"As needed":1};
 const perYear=sv=>FREQ_N[sv&&sv.freq]||1;
 const minFee=p=>(p&&p.lock&&p.lock.minFee!=null)?num(p.lock.minFee):num(S.minFee??1250);
@@ -759,14 +760,16 @@ const factorTxt=f=>f===1?"catalog price":f<1?pct(1-f).replace(".0","")+" discoun
 const DEFAULT_COUNT={"Per operator":1};
 const plural=w=>/(s|sh|ch|x)$/i.test(w)?w+"es":/[^aeiou]y$/i.test(w)?w.slice(0,-1)+"ies":w+"s";
 function unitWord(u,n){const w=String(u||"").replace(/^Per\s+/i,"").replace(/(\S)\/\S+$/,"$1").trim();if(!w)return "";if(num(n)===1)return w;const m=w.match(/^(.*?)( over .*)$/),head=m?m[1]:w,tail=m?m[2]:"";return head.split(" ").map((x,i,a)=>i===a.length-1?plural(x):x).join(" ")+tail}
-const ASSET_UNITS=["Per operator","Per well","Per gas well","Per oil well","Per inactive well","Per lease","Per injection / disposal well","Per critical-infrastructure asset","Per vehicle","Per disposal facility","Per gas processing plant","Per transportation / storage system","Per pipeline permit","Per pit","Per CI-designated operator","Per waste-hauler permit","Per inactive well over 25 years"];
+const WELL_PARTS=["Per active gas well","Per inactive gas well","Per active oil well","Per inactive oil well"];
+const WELL_DERIVED={"Per well":{sum:WELL_PARTS},"Per gas well":{sum:["Per active gas well","Per inactive gas well"]},"Per oil well":{sum:["Per active oil well","Per inactive oil well"]},"Per inactive well":{sum:["Per inactive gas well","Per inactive oil well"]}};
+const ASSET_UNITS=["Per operator","Per active gas well","Per inactive gas well","Per active oil well","Per inactive oil well","Per well","Per gas well","Per oil well","Per inactive well","Per lease","Per injection / disposal well","Per critical-infrastructure asset","Per vehicle","Per disposal facility","Per gas processing plant","Per transportation / storage system","Per pipeline permit","Per pit","Per CI-designated operator","Per waste-hauler permit","Per inactive well over 25 years"];
 const FLAT_UNITS=["Per CI-designated operator","Per waste-hauler permit","Per operator","Per engagement","Per memo","Per month","Per hearing day","Per operator/yr","Per operator/month"];
 const DEF_PCT=[1,0.95,0.9,0.85,0.8];
 function defUnit(u){const bp=/well|lease/i.test(u)&&!/injection/i.test(u)?(/inactive/i.test(u)?[5,15,40,100]:[10,25,100,250])
    :/injection|pipeline/i.test(u)?[2,5,15,40]:/facility|plant|system/i.test(u)?[1,3,10,25]:/vehicle/i.test(u)?[5,10,25,50]:/monthly report/i.test(u)?[12,36,120,300]
    :FLAT_UNITS.includes(u)?[1,2,5,10]:[5,15,40,100];
   const r={count:UNIT_LABEL[u]||u.replace(/^Per\s+/i,"").replace(/^./,c=>c.toUpperCase())+"s",bp,pct:FLAT_UNITS.includes(u)?[1,1,1,1,1]:DEF_PCT.slice()};
-  if(u==="Per oil well")r.derived={from:"Per well",less:"Per gas well"};return r}
+  if(WELL_DERIVED[u])r.derived=clone(WELL_DERIVED[u]);return r}
 function ensureUnits(cat){cat.units=cat.units||{};cat.services.forEach(sv=>{[sv.unit,sv.tiers&&sv.tiers.unit].forEach(u=>{if(u&&!cat.units[u])cat.units[u]=defUnit(u)})})}
 const MAX_TIERS=5;
 // Each filing has its own volume tiers: the client's count of a chosen unit sets the tier; each tier is a % of the Standard price.
@@ -1074,6 +1077,16 @@ function migrateCat(cat){
     if(mc)mc.lv[0].scope="Monthly monitoring and check-in for one operator";
     cat.v=15;
   }
+  if((cat.v||0)<16){ // wells entered as gas/oil × active/inactive; totals are calculated
+    cat.units=cat.units||{};WELL_PARTS.forEach(u=>{if(!cat.units[u])cat.units[u]=defUnit(u)});
+    Object.entries(WELL_DERIVED).forEach(([u,dv])=>{cat.units[u]=cat.units[u]||defUnit(u);cat.units[u].derived=clone(dv)});
+    [["Per active gas well","Gas — active"],["Per inactive gas well","Gas — inactive"],["Per active oil well","Oil — active"],["Per inactive oil well","Oil — inactive"]].forEach(([u,l])=>{cat.units[u].count=l});
+    if(cat.units["Per oil well"])cat.units["Per oil well"].count="Oil wells (active + inactive)";
+    if(cat.units["Per gas well"])cat.units["Per gas well"].count="Gas wells (active + inactive)";
+    if(cat.units["Per well"])cat.units["Per well"].count="Total wells";
+    if(cat.units["Per inactive well"])cat.units["Per inactive well"].count="Inactive wells (gas + oil)";
+    cat.v=16;
+  }
   cat.services.forEach(normalizeSvc);
   ensureUnits(cat);
   syncSubs(cat);
@@ -1127,6 +1140,10 @@ P.forEach(p=>{
     if(!LEVELS.includes(l.level))l.level="Standard"});
   p.pkgLevel=p.pkgLevel||{};Object.keys(p.pkgLevel).forEach(k=>{if(p.pkgLevel[k]==="Simple")p.pkgLevel[k]="Standard";if(p.pkgLevel[k]==="Super Complex")p.pkgLevel[k]="Complex"});
   p.pkgs=p.pkgs||{};Object.values(p.recOv||{}).forEach(o=>{if(o&&o.level)delete o.level});
+  if(!p.lock&&p.counts&&!WELL_PARTS.some(u=>p.counts[u]!=null)&&["Per well","Per gas well","Per inactive well"].some(u=>num(p.counts[u])>0)){
+    const c=p.counts,W=num(c["Per well"]),G=num(c["Per gas well"]),I=num(c["Per inactive well"]);
+    c["Per active gas well"]=G;c["Per inactive gas well"]=0;c["Per inactive oil well"]=I;c["Per active oil well"]=Math.max(0,W-G-I);
+    ["Per well","Per gas well","Per oil well","Per inactive well"].forEach(u=>delete c[u])}
   if(!p.lock)p.lines.forEach(l=>{const to={48:6,49:6,17:16,37:36}[l.n];if(to&&!SVC[l.n]&&SVC[to])l.n=to});
   if(!p.v11){
     const DU={WELLS:"Per well",GAS_WELLS:"Per gas well",INACTIVE:"Per inactive well",CI_ASSETS:"Per critical-infrastructure asset",VEHICLES:"Per vehicle",INJ_WELLS:"Per injection / disposal well",SWD_FAC:"Per disposal facility",PLANTS:"Per gas processing plant",T_SYS:"Per transportation / storage system",PIPE_PERMITS:"Per pipeline permit",PITS:"Per pit"};
@@ -1185,7 +1202,9 @@ function listPrice(s,level){return num(s.lv[lvIdx(level)].rec)}
 function scopeFor(s,level){return s.lv[lvIdx(level)].scope}
 const UNITS=p=>(p&&p.lock&&p.lock.units)||CAT.units;
 const svcList=p=>p&&p.lock?Object.values(p.lock.services):CAT.services;
-function unitCount(p,u,d=0){const r=UNITS(p)[u];if(r&&r.derived&&d<3)return Math.max(0,unitCount(p,r.derived.from,d+1)-unitCount(p,r.derived.less,d+1));const v=(p.counts||{})[u];return v==null||v===""?num(DEFAULT_COUNT[u]):num(v)}
+const derivedTxt=(U,dv)=>dv.sum?dv.sum.map(x=>U[x]?.count||x).join(" + "):(U[dv.from]?.count||dv.from)+" − "+(U[dv.less]?.count||dv.less);
+const derivedFrom=dv=>dv?(dv.sum||[dv.from,dv.less]):[];
+function unitCount(p,u,d=0){const r=UNITS(p)[u];if(r&&r.derived&&d<3)return r.derived.sum?r.derived.sum.reduce((a,x)=>a+unitCount(p,x,d+1),0):Math.max(0,unitCount(p,r.derived.from,d+1)-unitCount(p,r.derived.less,d+1));const v=(p.counts||{})[u];return v==null||v===""?num(DEFAULT_COUNT[u]):num(v)}
 const recSvcs=p=>svcList(p).filter(sv=>sv.pkg===REC);
 function autoQty(p,u){return p.lines.reduce((t,l)=>{const sv=getSvc(p,l.n);return t+(sv&&sv.unit===u?Math.max(0,num(l.qty)):0)},0)}
 function tierFor(p,sv){const t=(sv&&sv.tiers)||{unit:sv&&sv.unit,bp:[],pct:[1]},u=t.unit||sv.unit;
@@ -1328,10 +1347,13 @@ function renderUnits(p,light){
     box.querySelectorAll("[data-uauto]").forEach(el=>{const u=el.dataset.uauto,a=autoQty(p,u);el.placeholder=DEFAULT_COUNT[u]!=null?String(DEFAULT_COUNT[u]):(a>0?"auto "+fmtNum(Math.round(a*100)/100):"0")});
     box.querySelectorAll("[data-uderived]").forEach(el=>{el.value=fmtNum(unitCount(p,el.dataset.uderived))});return}
   const fld=u=>{const r=U[u],a=autoQty(p,u);return `<div class="field ufld ${used.has(u)?"":"unused"}"><label title="${esc(u)}">${esc(r.count||u)} ${badge(u)}</label>
-    ${r.derived?`<input type="text" data-uderived="${esc(u)}" value="${esc(fmtNum(unitCount(p,u)))}" readonly title="${esc(UNITS(p)[r.derived.from]?.count||"")} − ${esc(UNITS(p)[r.derived.less]?.count||"")}">`
+    ${r.derived?`<input type="text" data-uderived="${esc(u)}" value="${esc(fmtNum(unitCount(p,u)))}" readonly title="= ${esc(derivedTxt(UNITS(p),r.derived))}">`
      :`<input type="number" step="any" min="0" data-ucount="${esc(u)}" data-uauto="${esc(u)}" value="${esc((p.counts||{})[u]??"")}" placeholder="${DEFAULT_COUNT[u]!=null?String(DEFAULT_COUNT[u]):(a>0?"auto "+fmtNum(Math.round(a*100)/100):"0")}">`}
     <div class="note">${esc(u.toLowerCase())}</div></div>`};
-  box.innerHTML=`<h4 class="ugrp">Assets the operator runs</h4><div class="grid g4">${asset.map(fld).join("")}</div>
+  const wellKeys=WELL_PARTS.concat(Object.keys(WELL_DERIVED)).filter(u=>keys.includes(u)), wellsOn=WELL_PARTS.every(u=>keys.includes(u));
+  box.innerHTML=`${wellsOn?`<h4 class="ugrp">Wells <span class="note">enter the four counts; totals are calculated</span></h4><div class="grid g4 wells-in">${WELL_PARTS.map(fld).join("")}</div>
+    <div class="grid g4 wells-calc">${Object.keys(WELL_DERIVED).filter(u=>keys.includes(u)).map(fld).join("")}</div>`:""}
+    <h4 class="ugrp">${wellsOn?"Other assets":"Assets the operator runs"}</h4><div class="grid g4">${asset.filter(u=>!wellsOn||!wellKeys.includes(u)).map(fld).join("")}</div>
     <h4 class="ugrp">Filing volumes <span class="note">used for tiers — leave blank to use the units on this proposal</span></h4><div class="grid g4">${vol.map(fld).join("")}</div>`;
   box.querySelectorAll("[data-ucount]").forEach(el=>el.addEventListener("input",()=>{p.counts=p.counts||{};const u0=el.dataset.ucount,v=el.value.trim();if(v==="")delete p.counts[u0];else p.counts[u0]=num(v);
     if(v!=="")syncLineUnits(p,u0);touch(p,true)}));
@@ -1380,7 +1402,7 @@ function renderPkgs(p){
 }
 // Counts by unit set the units on every service priced on that unit (including units calculated from it, e.g. oil wells).
 function syncLineUnits(p,changed){const U=UNITS(p);p.lines.forEach(l=>{const sv=getSvc(p,l.n);if(!sv)return;const u=sv.unit,d=U[u]&&U[u].derived;
-  if(u===changed||(d&&(d.from===changed||d.less===changed))){const c=unitCount(p,u);if(c>0||u===changed)l.qty=c}})}
+  if(u===changed||derivedFrom(d).includes(changed)){const c=unitCount(p,u);if(c>0||u===changed)l.qty=c}})}
 const countFor=(p,n)=>{const sv=getSvc(p,n)||SVC[n];if(!sv)return 1;const c=unitCount(p,sv.unit);return c>0?c:1};
 function addLine(p,n){if(p.lock&&!p.lock.services[n])p.lock.services[n]=clone(SVC[n]);p.lines.push({id:uid(),n,level:"Standard",qty:countFor(p,n),override:null,tp:0,tpBilled:true});touch(p);renderLines(p);renderLedger(p);renderList();toast("Added #"+n+" "+SVC[n].forms);}
 function renderLines(p,keepFocus){
@@ -1857,7 +1879,7 @@ function renderTiers(){
    <div class="table-wrap"><table class="cat tiers"><thead><tr><th>Unit</th><th>Proposal field</th><th>Used by</th><th class="r">T1 up to</th><th class="r">T2 up to</th><th class="r">T3 up to</th><th class="r">T4 up to</th><th class="r t-p">T1 %</th><th class="r t-p">T2 %</th><th class="r t-p">T3 %</th><th class="r t-p">T4 %</th><th class="r t-p">T5 %</th><th>Example — Standard by tier</th><th></th></tr></thead><tbody>
    ${keys.map((u,ui)=>{const r=U[u],us=uses(u),fr=from(u),e=ex(u);return `<tr class="${ASSET_UNITS.includes(u)?"asset":""}">
      <td><input class="cell-txt" data-uname="${ui}" value="${esc(u)}" aria-label="Unit name"></td>
-     <td><input class="cell-txt" data-ucnt="${ui}" value="${esc(r.count||"")}" aria-label="Proposal field label">${r.derived?`<div class="note">= ${esc(U[r.derived.from]?.count||r.derived.from)} − ${esc(U[r.derived.less]?.count||r.derived.less)}</div>`:""}</td>
+     <td><input class="cell-txt" data-ucnt="${ui}" value="${esc(r.count||"")}" aria-label="Proposal field label">${r.derived?`<div class="note">= ${esc(derivedTxt(U,r.derived))}</div>`:""}</td>
      <td class="note used" title="${esc(us.map(x=>"#"+x.n+" "+x.forms).join(", "))}">${us.length?us.length+" service"+(us.length>1?"s":""):"—"}${fr.length?`<div>${fr.length} recurring</div>`:""}</td>
      ${r.bp.map((b,i)=>`<td class="r"><input class="cell" type="number" step="1" min="0" data-ubp="${ui}" data-i="${i}" value="${b}" aria-label="${esc(u)} T${i+1} limit"></td>`).join("")}
      ${r.pct.map((x,i)=>`<td class="r t-p"><input class="cell" type="number" step="any" min="0" data-upct="${ui}" data-i="${i}" value="${Math.round(num(x)*1000)/10}" aria-label="${esc(u)} T${i+1} percent of Standard"></td>`).join("")}
