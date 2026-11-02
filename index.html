@@ -607,6 +607,29 @@ table.cat tr.grp td{background:var(--mist);font-family:var(--display);font-weigh
 .billpick{display:inline-flex;align-items:center;gap:4px;margin-left:10px;font-size:11.5px;font-weight:600;color:var(--slate);vertical-align:1px}.billpick select{width:auto;max-width:240px;font-size:12px;border:1px solid var(--rule);border-radius:4px;padding:2px 4px;background:#fff}.billpick.b-monthly select{background:#EDF2F8}.billpick.b-split select{background:#FBF4E6}
 .wells-calc input[readonly]{background:#F3F6F8;color:var(--ink);font-weight:600;border-style:dashed}.wells-calc{margin-top:8px}
 .tl-from{font-size:11px;font-weight:700;padding:1px 8px;border-radius:10px;background:#102B38;color:#fff}
+/* pro forma */
+.pf-tgt-row{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;margin-bottom:10px}
+.pf-tgt-row label{font-weight:600;font-size:14px}
+.pf-tgt-row .note{flex-basis:100%;margin:0}
+.pf-legend{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12.5px;color:var(--slate);margin:4px 0 2px}
+.pf-legend i{display:inline-block;width:12px;height:12px;border-radius:2px;margin-left:10px}.pf-legend i:first-child{margin-left:0}
+.pf-chart svg{width:100%;height:auto;display:block}.pf-chart .pf-x{font-size:11px;fill:var(--slate);text-anchor:middle}.pf-chart .pf-v{font-size:10.5px;fill:var(--ink);font-weight:600}
+.pf-tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:1180px}
+.pf-tbl th,.pf-tbl td{padding:6px 8px;border-bottom:1px solid #EEF1F3;white-space:nowrap}
+.pf-tbl thead th{font-size:12px;color:var(--slate);font-weight:600;border-bottom:2px solid var(--rule);background:#F7F9FB;position:sticky;top:0}
+.pf-tbl tbody th{text-align:left;font-weight:500;color:var(--ink);white-space:normal;min-width:230px}
+.pf-tbl .soft{background:#FDF9F0}.pf-tbl thead .soft{background:#F7EBD2}
+.pf-tbl .tot{font-weight:700;background:#F3F6F8}
+.pf-tbl tr.sum th,.pf-tbl tr.sum td{font-weight:700;border-top:1px solid var(--ink)}
+.pf-tbl tr.neg td{color:#7F2A1A}.pf-tbl tr.muted th,.pf-tbl tr.muted td{color:var(--slate);font-size:12.5px}
+.pf-tbl tr.pf-sec th{background:#EEF3F7;font-family:var(--display);font-weight:700;font-size:13.5px}
+.pf-tbl tr.pf-in input{width:54px;text-align:right}
+.pf-mini{width:100%;border-collapse:collapse;font-size:13px}.pf-mini th{font-size:12px;color:var(--slate);font-weight:600;text-align:left;padding:5px 6px;border-bottom:1px solid var(--rule)}
+.pf-mini td{padding:4px 6px;border-bottom:1px solid #EEF1F3}.pf-mini th.r,.pf-mini td.r{text-align:right}.pf-mini input.cell{width:80px;text-align:right}.pf-mini input.cell-txt{width:100%}
+.pf-mini tr.sum td{font-weight:700;border-top:1px solid var(--ink)}
+.pf-assume .grid{align-items:start}.pf-assume h4{font-family:var(--display);font-weight:700;font-size:15px;margin:0 0 8px}
+@media (max-width:980px){.pf-assume .g2{grid-template-columns:1fr}}
+.pf-assume .grid>div{min-width:0;overflow-x:auto}@media (max-width:640px){.pf-mini input.cell{width:60px}.pf-mini{font-size:12px}}
 /* timeline */
 .tl-who{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:0 7px 0 7px;border-radius:10px;background:#F1F1EE;color:#7A7A70;margin-right:4px;vertical-align:1px;white-space:nowrap}
 .tl-who.on{background:#EAF3EE;color:#1F5A3C;padding-left:2px}
@@ -711,6 +734,7 @@ table.pwrap>thead,table.pwrap>tfoot{display:none}
     <button data-group="model" aria-current="page">Business Model Support</button>
     <button data-group="plan">Timeline</button>
     <button data-group="work">Services &amp; Work</button>
+    <button data-group="pl">Pro Forma P&amp;L</button>
     <button data-group="settings">Settings</button>
   </nav>
   <div class="who-am-i hidden" id="whoAmI"><span id="whoName"></span><a href="/.auth/logout?post_logout_redirect_uri=%2F" id="signOut">Sign out</a></div>
@@ -739,6 +763,7 @@ table.pwrap>thead,table.pwrap>tfoot{display:none}
 <div class="main hidden" id="view-workload"></div>
 <div class="main hidden" id="view-actions"></div>
 <div class="main hidden" id="view-timeline"></div>
+<div class="main hidden" id="view-proforma"></div>
 <div class="main hidden" id="view-systems"></div>
 <div class="main" id="view-philosophy"></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -1289,14 +1314,15 @@ function totals(p){
 const NAV_GROUPS=[{id:"model",views:[["philosophy","Pricing Philosophy"],["method","How Pricing Works"],["systems","Systems"]]},
   {id:"plan",views:[["timeline","Timeline"],["actions","Action Items"]]},
   {id:"work",views:[["catalog","Service Catalog"],["work","Proposals"],["workload","Workload"]]},
+  {id:"pl",views:[["proforma","Pro Forma P&L"]]},
   {id:"settings",views:[["settings","Settings"]]}];
 const groupOf=v=>NAV_GROUPS.find(g=>g.views.some(x=>x[0]===v))||NAV_GROUPS[0], lastView={};
 function setView(v){view=v;
   const g=groupOf(v);lastView[g.id]=v;
   document.querySelectorAll(".nav button").forEach(b=>b.setAttribute("aria-current",b.dataset.group===g.id?"page":"false"));
   const sn=$("#subnav");if(sn){sn.classList.toggle("hidden",g.views.length<2);sn.innerHTML=g.views.map(([id,l])=>`<button data-sub="${id}" aria-current="${id===v?"page":"false"}">${l}</button>`).join("")}
-  $("#view-work").classList.toggle("hidden",v!=="work");$("#view-actions").classList.toggle("hidden",v!=="actions");$("#view-systems").classList.toggle("hidden",v!=="systems");$("#view-catalog").classList.toggle("hidden",v!=="catalog");$("#view-settings").classList.toggle("hidden",v!=="settings");$("#view-method").classList.toggle("hidden",v!=="method");$("#view-workload").classList.toggle("hidden",v!=="workload");$("#view-philosophy").classList.toggle("hidden",v!=="philosophy");$("#view-timeline").classList.toggle("hidden",v!=="timeline");
-  if(v==="catalog")renderCatalog(); if(v==="settings")renderSettings(); if(v==="method")renderMethod(); if(v==="workload")renderWorkload(); if(v==="actions")renderActions(); if(v==="systems")renderSystems(); if(v==="philosophy")renderPhilosophy(); if(v==="work")renderWork(); if(v==="timeline")renderTimeline();
+  $("#view-work").classList.toggle("hidden",v!=="work");$("#view-actions").classList.toggle("hidden",v!=="actions");$("#view-systems").classList.toggle("hidden",v!=="systems");$("#view-catalog").classList.toggle("hidden",v!=="catalog");$("#view-settings").classList.toggle("hidden",v!=="settings");$("#view-method").classList.toggle("hidden",v!=="method");$("#view-workload").classList.toggle("hidden",v!=="workload");$("#view-philosophy").classList.toggle("hidden",v!=="philosophy");$("#view-timeline").classList.toggle("hidden",v!=="timeline");$("#view-proforma").classList.toggle("hidden",v!=="proforma");
+  if(v==="catalog")renderCatalog(); if(v==="settings")renderSettings(); if(v==="method")renderMethod(); if(v==="workload")renderWorkload(); if(v==="actions")renderActions(); if(v==="systems")renderSystems(); if(v==="philosophy")renderPhilosophy(); if(v==="work")renderWork(); if(v==="timeline")renderTimeline(); if(v==="proforma")renderProforma();
 }
 function renderList(){
   $("#plist").innerHTML=P.slice().sort((a,b)=>b.updated-a.updated).map(p=>{
@@ -2268,6 +2294,141 @@ function drawAssign(){
     ta.addEventListener("change",()=>{a.notes=ta.value;saveAct();toast("Saved")});
     row.querySelector("[data-del]").addEventListener("click",()=>{if(!confirm("Delete this assignment?"))return;ACT.assign=ACT.assign.filter(x=>x!==a);saveAct();renderAssign()});
   });
+}
+
+/* ---------- pro forma P&L ---------- */
+const PF_MONTHS=(()=>{const a=[];for(let y=2026,m=11;y<2028;){a.push(y+"-"+String(m).padStart(2,"0"));if(++m>12){m=1;y++}if(y===2027&&m===13)break;if(a.length>=14)break}return a})();
+const PF_SOFT=3; // Nov 2026 – Jan 2027 soft launch; hard launch Feb 1, 2027
+const pfDefaults=()=>({target:1000000,pool:200,billNext:true,
+  sizes:[{name:"Small — like Red Highland (83 wells)",fee:9574,mix:0.6},{name:"Mid-size — like Empire Texas (140 wells)",fee:10100,mix:0.3},{name:"Large — like Warwick-Artemis (237 wells)",fee:17319,mix:0.1}],
+  newClients:[1,1,2,6,7,8,8,8,8,8,7,7,6,4], // solved for the $1M target with the starting assumptions
+  nonClient:{soft:0,hard:0.15},
+  auto:{clientHrs:1,overhead:0.3,fteHours:1600,minPrep:1,minSen:1}, // automation-first: filings are prepared from ERP data; people review and file
+  svcs:[{n:45,rate:0,onb:0.4},{n:22,rate:0,onb:0.2},{n:8,rate:1,onb:0},{n:9,rate:0.4,onb:0},{n:13,rate:0.3,onb:0},{n:16,rate:1.5,onb:0},{n:19,rate:2,onb:0},{n:6,rate:3,onb:0},
+    {n:4,rate:0.5,onb:0},{n:40,rate:0.1,onb:0},{n:23,rate:0.2,onb:0},{n:58,rate:0.3,onb:0},{n:42,rate:0.3,onb:0},{n:44,rate:0.05,onb:0}]});
+const pfGet=()=>{if(!S.pf)S.pf=pfDefaults();const d=pfDefaults();Object.keys(d).forEach(k=>{if(S.pf[k]==null)S.pf[k]=clone(d[k])});Object.keys(d.auto).forEach(k=>{if(S.pf.auto[k]==null)S.pf.auto[k]=d.auto[k]});
+  if(!Array.isArray(S.pf.newClients)||S.pf.newClients.length!==PF_MONTHS.length)S.pf.newClients=d.newClients.slice();return S.pf};
+const pfMonthLbl=k=>{const [y,m]=k.split("-").map(Number);return new Date(Date.UTC(y,m-1,1)).toLocaleDateString("en-US",{timeZone:"UTC",month:"short"})+" ’"+String(y).slice(2)};
+const pfPrice=n=>SVC[n]?num(SVC[n].lv[0].rec):0;
+const PF_HRS={45:6,22:8,8:1.5,9:2.5,13:0.5,16:0.75,19:0.75,6:0.25,4:0.5,40:6,47:6,23:3,58:1.5,42:4,44:10,10:3,11:3,14:1,1:1.5,7:0.5,5:1};
+const pfHrs=x=>x.hrs!=null?num(x.hrs):(PF_HRS[x.n]??1);
+const pfFee=pf=>{const w=pf.sizes.reduce((a,s)=>a+num(s.mix),0)||1;return pf.sizes.reduce((a,s)=>a+num(s.fee)*num(s.mix),0)/w};
+function pfModel(pf,newC=pf.newClients){
+  const feeYr=pfFee(pf), pool=num(pf.pool), gm=num(S.gm), sub=num(S.subrs), A=pf.auto, fh=num(A.fteHours)||1600;
+  const rateP=num((S.team||{}).capPrep)/fh, rateS=num((S.team||{}).capSen)/fh, rate=rateP*(1-sub)+rateS*sub;
+  let signed=0,cum=0;const svc=pf.svcs.filter(x=>SVC[x.n]).map(x=>({...x,price:pfPrice(x.n),units:[],rev:[]}));
+  const M=PF_MONTHS.map((k,m)=>{const nw=Math.max(0,num(newC[m])), before=signed;signed+=nw;const billing=pf.billNext?before:signed;
+    const nc=m<PF_SOFT?num(pf.nonClient.soft):num(pf.nonClient.hard), others=Math.max(0,pool-signed);
+    let onb=0,proj=0,hrs=0;svc.forEach(x=>{const uo=nw*num(x.onb), up=num(x.rate)/12*(signed+nc*others);
+      // whole units to sell: round the running total so fractions carry into later months
+      const a0=x.acc||0,a1=a0+uo+up,u=Math.round(a1)-Math.round(a0);x.acc=a1;x.units[m]=u;x.rev[m]=u*x.price;hrs+=u*pfHrs(x);const fo=uo+up?uo/(uo+up):0;onb+=u*x.price*fo;proj+=u*x.price*(1-fo)});
+    const rec=billing*feeYr/12, rev=rec+onb+proj;cum+=rev;
+    const hours=(hrs+billing*num(A.clientHrs))*(1+num(A.overhead)), hcost=hours*rate, fte=hours*12/fh, fteP=fte*(1-sub), fteS=fte*sub;
+    // staffing: from hard launch keep at least the minimum team; add a person when the work passes 1.1 FTE per head
+    const soft=m<PF_SOFT, hP=soft?0:Math.max(num(A.minPrep),Math.ceil(fteP/1.1)), hS=soft?0:Math.max(num(A.minSen),Math.ceil(fteS/1.1));
+    const labor=soft?hcost:(hP*num((S.team||{}).capPrep)+hS*num((S.team||{}).capSen))/12;
+    return {k,soft,nw,signed,billing,rec,onb,proj,rev,hours,hcost,labor,margin:rev-labor,cum,pool50:rev*(1-gm),fteP,fteS,hP,hS}});
+  const T=k=>M.reduce((a,x)=>a+x[k],0);
+  return {M,svc,feeYr,rate,hcost:T("hcost"),total:T("rev"),labor:T("labor"),margin:T("margin"),hours:T("hours"),pool50:T("pool50"),rec:T("rec"),onb:T("onb"),proj:T("proj"),signed,exitMRR:M[M.length-1].rev,last:M[M.length-1]}}
+function pfSolve(pf){const base=pf.newClients.map(num),tgt=num(pf.target),pool=num(pf.pool);if(!base.some(x=>x>0))return {ok:false,msg:"Enter at least one month of new clients first."};
+  const rev=k=>pfModel(pf,base.map(x=>x*k)).total;let lo=0,hi=1;while(rev(hi)<tgt&&hi<64)hi*=2;
+  for(let i=0;i<50;i++){const mid=(lo+hi)/2;if(rev(mid)<tgt)lo=mid;else hi=mid}
+  let n=base.map(x=>Math.round(x*hi));const order=base.map((x,i)=>[x,i]).filter(x=>x[1]>=PF_SOFT).sort((a,b)=>b[0]-a[0]||a[1]-b[1]).map(x=>x[1]);
+  let guard=0;while(pfModel(pf,n).total<tgt&&guard++<400){n[order[guard%order.length]]++}
+  const tot=n.reduce((a,x)=>a+x,0);pf.newClients=n;return {ok:tot<=pool,msg:tot>pool?`That needs ${tot} compliance clients — more than the ${pool} in the pool. Raise attach rates or fees, or lower the target.`:""}}
+function renderProforma(){
+  const v=$("#view-proforma"),pf=pfGet(),R=pfModel(pf),M=R.M,tgt=num(pf.target),gap=R.total-tgt;
+  const k0=x=>"$"+(Math.abs(x)>=1e6?(x/1e6).toFixed(2)+"M":Math.round(x/1000)+"k");
+  const capP=num((S.team||{}).capPrep)||1,capS=num((S.team||{}).capSen)||1;
+  // chart
+  const W=900,H=260,pl=46,pb=34,pt=16,bw=(W-pl-10)/M.length,mx=Math.max(...M.map(x=>x.rev),1)*1.12,y=v=>H-pb-(H-pb-pt)*v/mx;
+  const ticks=[0,.25,.5,.75,1].map(f=>mx/1.12*f);
+  const bars=M.map((x,i)=>{const X=pl+i*bw+bw*.18,w=bw*.64;let base=0;const seg=(val,c)=>{const y0=y(base),y1=y(base+val);base+=val;return val>0?`<rect x="${X}" y="${y1}" width="${w}" height="${Math.max(0,y0-y1)}" fill="${c}"/>`:""};
+    return seg(x.rec,"#2F5597")+seg(x.onb,"#D3A24A")+seg(x.proj,"#2F7D55")+`<text x="${X+w/2}" y="${y(x.rev)-5}" text-anchor="middle" class="pf-v">${k0(x.rev)}</text><text x="${X+w/2}" y="${H-pb+15}" text-anchor="middle" class="pf-x">${pfMonthLbl(x.k)}</text>`}).join("");
+  const chart=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Monthly revenue by type">
+    <rect x="${pl}" y="${pt}" width="${bw*PF_SOFT}" height="${H-pb-pt}" fill="#FBF4E6"/><text x="${pl+6}" y="${pt+12}" class="pf-x" style="text-anchor:start">Soft launch</text>
+    <line x1="${pl+bw*PF_SOFT}" x2="${pl+bw*PF_SOFT}" y1="${pt}" y2="${H-pb}" stroke="#B5452F" stroke-dasharray="4 3"/><text x="${pl+bw*PF_SOFT+6}" y="${pt+12}" class="pf-x" style="text-anchor:start;fill:#B5452F">Hard launch Feb 1</text>
+    ${ticks.map(t=>`<line x1="${pl}" x2="${W-6}" y1="${y(t)}" y2="${y(t)}" stroke="#E6EBEE"/><text x="${pl-6}" y="${y(t)+4}" text-anchor="end" class="pf-x">${k0(t)}</text>`).join("")}${bars}</svg>`;
+  const cols=M.map(x=>`<th class="r ${x.soft?"soft":""}">${pfMonthLbl(x.k)}</th>`).join("");
+  const rowM=(lab,f,cls="",fmt=money)=>`<tr class="${cls}"><th>${lab}</th>${M.map(x=>`<td class="r ${x.soft?"soft":""}">${fmt(f(x))}</td>`).join("")}<td class="r tot">${cls.includes("nosum")?"":fmt(M.reduce((a,x)=>a+f(x),0))}</td></tr>`;
+  const n1=x=>x?(Math.round(x*10)/10).toLocaleString("en-US"):"—", n0=x=>x?Math.round(x).toLocaleString("en-US"):"—";
+  const svcRows=R.svc.map((x,i)=>{const sv=SVC[x.n];return `<tr><th><span class="fn">#${x.n}</span> ${esc(sv.sit?(CAT.forms[sv.form]?.label||sv.forms)+" – "+sv.sit:sv.name)}<div class="note">${money(x.price)} ${esc(sv.unit.toLowerCase())}${num(x.onb)?` · ${Math.round(num(x.onb)*100)}% of new clients`:""}${num(x.rate)?` · ${num(x.rate)} a year per client`:""}</div></th>${x.units.map((u,m)=>`<td class="r ${M[m].soft?"soft":""}">${n1(u)}</td>`).join("")}<td class="r tot">${money(x.rev.reduce((a,b)=>a+b,0))}</td></tr>`}).join("");
+  v.innerHTML=`<div class="doc-head"><div><h1>Pro forma P&amp;L</h1><div class="sub">Year-one revenue and direct labor, November 2026 to December 2027 — soft launch November to January, hard launch with the marketing push on February 1, 2027. Prices come from the Service catalog; edit the sales plan and assumptions below and everything recalculates. Saved for everyone.</div></div></div>
+   <div class="tl-stats pf-stats">
+    <div class="tl-stat launch"><span>Revenue, Nov 2026 – Dec 2027</span><strong>${money(R.total)}</strong><em>${gap>=0?"+"+money(gap)+" over":money(-gap)+" short of"} the ${money(tgt)} target</em></div>
+    <div class="tl-stat"><span>Direct labor — automation-first</span><strong>${money(R.labor)} <small>${pct(R.total?R.labor/R.total:0)}</small></strong><em>Direct margin ${money(R.margin)} · ${pct(R.total?R.margin/R.total:0)} · ${Math.round(R.hours).toLocaleString("en-US")} review hours · was ${money(R.pool50)} at a ${pct(1-num(S.gm)).replace(".0","")} labor pool</em></div>
+    <div class="tl-stat"><span>Compliance clients signed by Dec 2027</span><strong>${R.signed} <small>of ${num(pf.pool)}</small></strong><div class="bar"><i style="width:${Math.min(100,R.signed/Math.max(1,num(pf.pool))*100)}%"></i></div></div>
+    <div class="tl-stat"><span>December 2027 run rate</span><strong>${money(R.exitMRR)}<small> / mo</small></strong><em>${money(R.exitMRR*12)} a year · team ${R.last.hP} preparer${R.last.hP===1?"":"s"} + ${R.last.hS} Senior${R.last.hS===1?"":"s"}</em></div>
+   </div>
+   <section class="panel pf-target"><div class="pf-tgt-row"><label>Revenue target for the period $ <input class="cell" type="number" min="0" step="10000" id="pfTarget" value="${tgt}" style="width:130px"></label>
+     <button class="btn primary" id="pfSolve">Solve the sales plan for this target</button><button class="btn" id="pfReset">Reset to starting plan</button>
+     <span class="note">Solving scales the new compliance clients each month (keeping the ramp's shape) until revenue reaches the target. Fine-tune any month in the sales plan below.</span></div>
+     <div class="pf-legend"><i style="background:#2F5597"></i>Monthly compliance filings <i style="background:#D3A24A"></i>Onboarding projects <i style="background:#2F7D55"></i>Other filings and projects</div>
+     <div class="pf-chart">${chart}</div></section>
+   <section class="panel"><h3>Profit and loss <span class="hint">Automation-first: filings are prepared from ERP data, so direct labor is the hours people spend reviewing and filing, at loaded cost</span></h3>
+    <div class="table-wrap"><table class="pf-tbl"><thead><tr><th></th>${cols}<th class="r tot">Total</th></tr></thead><tbody>
+     ${rowM("Monthly compliance filings",x=>x.rec)}${rowM("Onboarding projects",x=>x.onb)}${rowM("Other filings and projects",x=>x.proj)}
+     ${rowM("Total revenue",x=>x.rev,"sum")}${rowM("Direct labor",x=>-x.labor,"neg")}${rowM("Direct margin",x=>x.margin,"sum")}
+     ${rowM("Direct margin %",x=>x.rev?x.margin/x.rev:0,"muted nosum",v=>pct(v))}
+     ${rowM("Cumulative revenue",x=>x.cum,"muted nosum")}
+     ${rowM("Review and filing hours",x=>x.hours,"muted",v=>Math.round(v).toLocaleString("en-US"))}
+     ${rowM("Cost of those hours at loaded rates",x=>x.hcost,"muted")}
+     <tr class="muted"><th>Workload (FTE) — preparers / Seniors</th>${M.map(x=>`<td class="r ${x.soft?"soft":""}">${x.fteP.toFixed(1)} / ${x.fteS.toFixed(1)}</td>`).join("")}<td class="r tot"></td></tr>
+     <tr><th>Team on payroll — preparers / Seniors</th>${M.map(x=>`<td class="r ${x.soft?"soft":""}">${x.soft?"existing staff":x.hP+" / "+x.hS}</td>`).join("")}<td class="r tot">today ${num((S.team||{}).prep)} / ${num((S.team||{}).sen)}</td></tr>
+    </tbody></table></div>
+    <p class="note">Hours = review and filing time for each filing plus ${num(pf.auto.clientHrs)} hour${num(pf.auto.clientHrs)===1?"":"s"} per compliance client a month, plus ${pct(num(pf.auto.overhead)).replace(".0","")} for data exceptions, RRC rejections and client contact. Labor = hours × loaded cost (${money(R.rate,2)} an hour blended: one year's cost from Settings — ${money(capP)} preparer, ${money(capS)} Senior — over ${num(pf.auto.fteHours).toLocaleString("en-US")} productive hours, with Seniors doing the ${pct(num(S.subrs)).replace(".0","")} second review). FTE = hours × 12 ÷ ${num(pf.auto.fteHours).toLocaleString("en-US")}. <b>Direct labor in the P&amp;L is team payroll:</b> during the soft launch existing staff cover the work (charged at the cost of the hours); from February at least ${num(pf.auto.minPrep)} preparer and ${num(pf.auto.minSen)} Senior are on payroll, and another person is added when the work passes 1.1 FTE per person.</p></section>
+   <section class="panel"><h3>What we need to sell each month <span class="hint">New compliance clients drive everything; edit any month</span></h3>
+    <div class="table-wrap"><table class="pf-tbl"><thead><tr><th></th>${cols}<th class="r tot">Total</th></tr></thead><tbody>
+     <tr class="pf-in"><th>New compliance clients signed</th>${M.map((x,m)=>`<td class="r ${x.soft?"soft":""}"><input class="cell" type="number" min="0" step="1" data-pfnew="${m}" value="${num(pf.newClients[m])}" aria-label="New clients ${pfMonthLbl(x.k)}"></td>`).join("")}<td class="r tot">${R.signed}</td></tr>
+     ${rowM("Compliance clients billed",x=>x.billing,"muted nosum",n0)}
+     <tr class="pf-sec"><th colspan="${M.length+2}">Filings and projects to sell (units)</th></tr>${svcRows}
+    </tbody></table></div></section>
+   <section class="panel pf-assume"><h3>Assumptions</h3>
+    <div class="grid g2">
+     <div><h4>Compliance clients</h4>
+      <table class="pf-mini"><thead><tr><th>Client size</th><th class="r">Annual fee</th><th class="r">Share of clients</th></tr></thead><tbody>
+       ${pf.sizes.map((z,i)=>`<tr><td><input class="cell-txt" data-pfsz="${i}" data-k="name" value="${esc(z.name)}"></td><td class="r"><input class="cell" type="number" min="0" step="any" data-pfsz="${i}" data-k="fee" value="${num(z.fee)}"></td><td class="r"><input class="cell" type="number" min="0" max="100" step="any" data-pfsz="${i}" data-k="mix" value="${Math.round(num(z.mix)*1000)/10}">%</td></tr>`).join("")}
+       <tr class="sum"><td>Average client</td><td class="r">${money(R.feeYr)} / yr</td><td class="r">${money(R.feeYr/12)} / mo</td></tr></tbody></table>
+      <p class="note">Annual fees are Joe's three proposals as priced by the catalog (P-5 renewal, CI-D, PR, W-10 / G-10, H-10 and monthly monitoring), billed monthly.</p>
+      <div class="grid g2" style="margin-top:8px">
+       <div class="field"><label>Existing clients who need these services</label><input type="number" min="0" data-pfk="pool" value="${num(pf.pool)}"></div>
+       <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-top:18px"><input type="checkbox" id="pfBillNext" ${pf.billNext?"checked":""} style="width:auto"> Billing starts the month after signing</label>
+       <div class="field"><label>Project demand from clients not on compliance — soft launch (% of the client rate)</label><input type="number" min="0" step="any" data-pfnc="soft" value="${Math.round(num(pf.nonClient.soft)*1000)/10}"></div>
+       <div class="field"><label>— after hard launch (% of the client rate)</label><input type="number" min="0" step="any" data-pfnc="hard" value="${Math.round(num(pf.nonClient.hard)*1000)/10}"></div>
+      </div>
+      <h4 style="margin-top:14px">Automation-first labor</h4>
+      <div class="grid g3">
+       <div class="field"><label>Review hours per compliance client a month</label><input type="number" min="0" step="any" data-pfa="clientHrs" value="${num(pf.auto.clientHrs)}"></div>
+       <div class="field"><label>Exceptions and client contact (% on top)</label><input type="number" min="0" step="any" data-pfa="overhead" value="${Math.round(num(pf.auto.overhead)*1000)/10}"></div>
+       <div class="field"><label>Productive hours per person a year</label><input type="number" min="1" step="any" data-pfa="fteHours" value="${num(pf.auto.fteHours)}"></div>
+       <div class="field"><label>Minimum preparers from Feb 2027</label><input type="number" min="0" step="1" data-pfa="minPrep" value="${num(pf.auto.minPrep)}"></div>
+       <div class="field"><label>Minimum Seniors from Feb 2027</label><input type="number" min="0" step="1" data-pfa="minSen" value="${num(pf.auto.minSen)}"></div>
+      </div>
+      <p class="note">Monthly compliance review covers the PR (EDI), W-10 / G-10, H-10, P-5 renewal, CI-D windows and the monthly monitoring check, all prepared from ERP data. Joe's worksheets show 0.3–0.75 hours per filing with today's partly manual process.</p></div>
+     <div><h4>Filings and projects</h4>
+      <table class="pf-mini"><thead><tr><th>Service</th><th class="r">Catalog price</th><th class="r">Per client a year</th><th class="r">% of new clients</th><th class="r">Review hours each</th><th></th></tr></thead><tbody>
+       ${pf.svcs.map((x,i)=>{const sv=SVC[x.n];return `<tr><td>${sv?`<span class="fn">#${x.n}</span> ${esc(sv.sit?(CAT.forms[sv.form]?.label||sv.forms)+" – "+sv.sit:sv.name)}`:`#${x.n} (not in catalog)`}</td><td class="r">${money(pfPrice(x.n))}</td>
+         <td class="r"><input class="cell" type="number" min="0" step="any" data-pfsv="${i}" data-k="rate" value="${num(x.rate)}"></td><td class="r"><input class="cell" type="number" min="0" max="100" step="any" data-pfsv="${i}" data-k="onb" value="${Math.round(num(x.onb)*1000)/10}"></td>
+         <td class="r"><input class="cell" type="number" min="0" step="any" data-pfsv="${i}" data-k="hrs" value="${pfHrs(x)}"></td>
+         <td><button class="icon-btn" data-pfdel="${i}" aria-label="Remove">×</button></td></tr>`}).join("")}
+       <tr><td colspan="6"><select class="cell-sel" id="pfAdd"><option value="">Add a service from the catalog…</option>${CAT.services.filter(s=>!pf.svcs.some(x=>x.n===s.n)).sort((a,b)=>a.n-b.n).map(s=>`<option value="${s.n}">#${s.n} ${esc(s.sit?(CAT.forms[s.form]?.label||s.forms)+" – "+s.sit:s.name)}</option>`).join("")}</select></td></tr>
+      </tbody></table>
+      <p class="note">“Review hours each” is the time to check an automatically prepared filing and e-file (or paper file) it; advisory work (memos, hearings, audits) stays mostly manual. Units are rounded to whole filings each month, carrying fractions forward. “Per client a year” is how many units a compliance client buys in a year (permits, wells, leases…); “% of new clients” is bought once at signing (the P-5 health check and Rule 15 / SB 1150 inactive-well project open the relationship).</p></div>
+    </div></section>`;
+  const re=()=>{save();renderProforma()};
+  $("#pfTarget").addEventListener("change",e=>{pf.target=Math.max(0,num(e.target.value));re()});
+  $("#pfSolve").addEventListener("click",()=>{const r=pfSolve(pf);re();toast(r.msg||"Sales plan solved for "+money(num(pf.target)))});
+  $("#pfReset").addEventListener("click",()=>{if(!confirm("Reset the pro forma to the starting plan and assumptions?"))return;S.pf=pfDefaults();re()});
+  v.querySelectorAll("[data-pfnew]").forEach(el=>el.addEventListener("change",()=>{pf.newClients[+el.dataset.pfnew]=Math.max(0,Math.round(num(el.value)));re()}));
+  v.querySelectorAll("[data-pfsz]").forEach(el=>el.addEventListener("change",()=>{const z=pf.sizes[+el.dataset.pfsz],k=el.dataset.k;z[k]=k==="name"?el.value:k==="mix"?num(el.value)/100:num(el.value);re()}));
+  v.querySelectorAll("[data-pfsv]").forEach(el=>el.addEventListener("change",()=>{const x=pf.svcs[+el.dataset.pfsv],k=el.dataset.k;x[k]=k==="onb"?num(el.value)/100:num(el.value);re()}));
+  v.querySelectorAll("[data-pfa]").forEach(el=>el.addEventListener("change",()=>{const k=el.dataset.pfa;pf.auto[k]=k==="overhead"?num(el.value)/100:Math.max(k==="fteHours"?1:0,num(el.value));re()}));
+  v.querySelectorAll("[data-pfdel]").forEach(b=>b.addEventListener("click",()=>{pf.svcs.splice(+b.dataset.pfdel,1);re()}));
+  v.querySelectorAll("[data-pfnc]").forEach(el=>el.addEventListener("change",()=>{pf.nonClient[el.dataset.pfnc]=num(el.value)/100;re()}));
+  v.querySelector('[data-pfk="pool"]').addEventListener("change",e=>{pf.pool=Math.max(0,Math.round(num(e.target.value)));re()});
+  $("#pfBillNext").addEventListener("change",e=>{pf.billNext=e.target.checked;re()});
+  $("#pfAdd").addEventListener("change",e=>{const n=+e.target.value;if(!n)return;pf.svcs.push({n,rate:0.5,onb:0});re()});
+  numify(v);
 }
 
 /* ---------- roll-out timeline ---------- */
