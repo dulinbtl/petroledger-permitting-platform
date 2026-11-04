@@ -634,6 +634,14 @@ table.cat tr.grp td{background:var(--mist);font-family:var(--display);font-weigh
 .pf-assume .grid{align-items:start}.pf-fix{white-space:nowrap}.pf-fix input.cell{width:46px}.pf-assume h4{font-family:var(--display);font-weight:700;font-size:15px;margin:0 0 8px}
 @media (max-width:980px){.pf-assume .g2{grid-template-columns:1fr}}
 .pf-assume .grid>div{min-width:0;overflow-x:auto}@media (max-width:640px){.pf-mini input.cell{width:60px}.pf-mini{font-size:12px}}
+.b-erp{border:2px solid var(--gold);background:linear-gradient(0deg,#FFFDF7,#FFF8E8)}
+.b-erp h3{font-size:18px}.b-erp.erp-empty{box-shadow:0 0 0 3px rgba(211,162,74,.25)}
+.erp-chips{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 10px;min-height:34px;align-items:center}
+.erp-chip{display:inline-flex;align-items:center;gap:6px;background:#102B38;color:#fff;font-weight:600;font-size:14px;padding:6px 6px 6px 12px;border-radius:18px}
+.erp-chip button{border:0;background:rgba(255,255,255,.18);color:#fff;width:22px;height:22px;border-radius:50%;cursor:pointer;font-size:14px;line-height:1}
+.erp-chip button:hover{background:rgba(255,255,255,.35)}
+.erp-none{color:#8A6A2A;font-weight:600;font-size:14px}
+.erp-add{display:flex;gap:8px;flex-wrap:wrap}.erp-add select,.erp-add input{max-width:320px;padding:8px 10px;border:1px solid var(--rule);border-radius:var(--r);background:#fff;font:inherit;font-size:14px;font-weight:600;color:var(--ink)}
 /* timeline */
 .tl-who{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:0 7px 0 7px;border-radius:10px;background:#F1F1EE;color:#7A7A70;margin-right:4px;vertical-align:1px;white-space:nowrap}
 .tl-who.on{background:#EAF3EE;color:#1F5A3C;padding-left:2px}
@@ -1222,6 +1230,11 @@ function load(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return 
 function save(){try{localStorage.setItem(LS_P,JSON.stringify(P));localStorage.setItem(LS_S,JSON.stringify(S))}catch(e){toast("Could not save in this browser — export to keep your work")}}
 function uid(){return Math.random().toString(36).slice(2,10)}
 function today(){return new Date().toISOString().slice(0,10)}
+// Client systems: where the data for automated filings comes from (oil & gas ERP, accounting, land, field data)
+const ERP_GROUPS=[["Oil & gas ERP and accounting",["PakEnergy","Quorum","Enertia","W Energy Software","P2 BOLO","OGsys","WolfePak","Excalibur","Seisoft","Enverus","SAP S/4HANA","Oracle / JD Edwards"]],
+  ["General accounting apps",["QuickBooks Online","QuickBooks Desktop","Sage Intacct","Sage 100 / 300","NetSuite","Microsoft Dynamics 365","Microsoft Dynamics GP","Xero"]],
+  ["Land",["Quorum Land","P2 Land","WolfePak Land","Enertia Land","Landdox"]],
+  ["Field data and production",["Peloton (WellView / ProdView)","Greasebook","Spreadsheets / manual"]]];
 function blank(){
   const d=new Date();d.setMonth(d.getMonth()+1);d.setDate(1);
   return {id:uid(),status:"Draft",updated:Date.now(),
@@ -1358,6 +1371,11 @@ function field(label,path,val,type="text",extra=""){return `<div class="field ${
 function renderBuilder(p){
   const b=$("#tabBody");
   b.innerHTML=`<div class="builder"><div>
+   <section class="panel b-erp"><h3>Client's ERP system <span class="hint">Where the data for automated filings comes from — pick every system that applies</span></h3>
+    <div class="erp-chips" id="erpChips"></div>
+    <div class="erp-add"><select id="erpAdd" aria-label="Add a system"><option value="">+ Add a system…</option>${ERP_GROUPS.map(([g,L])=>`<optgroup label="${esc(g)}">${L.filter(x=>!(p.client.erp||[]).includes(x)).map(x=>`<option>${esc(x)}</option>`).join("")}</optgroup>`).join("")}<option value="__other">Other (type a name)…</option></select>
+     <input id="erpOther" placeholder="System name, then Enter" class="hidden"></div>
+   </section>
    <section class="panel b-client"><h3>Client and proposal</h3>
     <div class="grid g4">
       ${field("Client / operator name","client.name",p.client.name,"text","span2")}
@@ -1396,6 +1414,15 @@ function renderBuilder(p){
     touch(p,true)}));
   wireCombo(p);
   $("#svcBrowse").addEventListener("change",e=>{if(e.target.value){addLine(p,+e.target.value);e.target.value=""}});
+  const erpDraw=()=>{const L=p.client.erp||[];$("#erpChips").innerHTML=L.length?L.map((x,i)=>`<span class="erp-chip">${esc(x)}<button type="button" data-erpdel="${i}" aria-label="Remove ${esc(x)}">×</button></span>`).join(""):`<span class="erp-none">Not set yet — choose the client's ERP below</span>`;
+    $("#erpAdd").querySelectorAll("option").forEach(o=>{if(o.value&&o.value!=="__other")o.hidden=L.includes(o.value)});$(".b-erp").classList.toggle("erp-empty",!L.length)};
+  const erpSet=L=>{p.client.erp=L;touch(p);erpDraw();renderList()};
+  $("#erpChips").addEventListener("click",e=>{const b=e.target.closest("[data-erpdel]");if(b){const L=(p.client.erp||[]).slice();L.splice(+b.dataset.erpdel,1);erpSet(L)}});
+  $("#erpAdd").addEventListener("change",e=>{const v=e.target.value;e.target.value="";if(!v)return;if(v==="__other"){$("#erpOther").classList.remove("hidden");$("#erpOther").focus();return}
+    if(!(p.client.erp||[]).includes(v))erpSet([...(p.client.erp||[]),v])});
+  $("#erpOther").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();const v=e.target.value.trim();e.target.value="";e.target.classList.add("hidden");if(v&&!(p.client.erp||[]).includes(v))erpSet([...(p.client.erp||[]),v])}else if(e.key==="Escape"){e.target.value="";e.target.classList.add("hidden")}});
+  $("#erpOther").addEventListener("blur",e=>{const v=e.target.value.trim();e.target.value="";e.target.classList.add("hidden");if(v&&!(p.client.erp||[]).includes(v))erpSet([...(p.client.erp||[]),v])});
+  erpDraw();
   renderUnits(p);renderPkgs(p);renderLines(p);renderLedger(p);
 }
 function renderUnits(p,light){
@@ -1660,6 +1687,7 @@ function renderDoc(p){
        <p class="note" style="margin:6px 0 0">Based on ${unitOrder(UNITS(p)).filter(u=>unitCount(p,u)>0&&u!=="Per operator"&&k.items.some(i=>i.fee>0&&i.s.unit===u)).map(u=>fmtNum(unitCount(p,u))+" "+esc((UNITS(p)[u].count||u).toLowerCase())).join(", ")}. Includes deadline monitoring and RRC Online / LoneSTAR administration.</p></div>`).join(""):""}
    ${H("Assumptions, exclusions and client responsibilities")}
    <ol class="terms">
+    ${(p.client.erp||[]).length?`<li>Filings are prepared from data in your ${esc((p.client.erp||[]).join(", ").replace(/, ([^,]*)$/," and $1"))} system${(p.client.erp||[]).length>1?"s":""}, using read-only access you provide. Our fees assume that data is current and complete.</li>`:""}
     <li>RRC state filing fees and surcharges are billed at cost plus a ${pct(S.handling).replace(".0","")} handling fee and are not part of the professional fees.</li>
     <li>Fees are based on the scope and counts in this proposal. If the work proves materially different — for example title issues, protests or missing data — we will tell you and agree any change in fees before continuing.</li>
     <li>A minimum of ${money(minFee(p))} in professional fees applies to this proposal. ${PKG_ON?"À la carte services":"Services"} marked "Expedited" include a flat expedite fee for rush handling and processing${PKG_ON?" (expedite is not offered within the package)":""}; RRC expedite fees, where the RRC charges one, are passed through separately.</li>
@@ -2402,7 +2430,7 @@ function renderProforma(){
      ${rowM("Review and filing hours",x=>x.hours,"muted",v=>Math.round(v).toLocaleString("en-US"))}
      ${rowM("Cost of those hours at loaded rates",x=>x.hcost,"muted")}
      <tr class="muted"><th>Workload (FTE) — preparers / Seniors</th>${M.map(x=>`<td class="r ${x.soft?"soft":""}">${x.fteP.toFixed(1)} / ${x.fteS.toFixed(1)}</td>`).join("")}<td class="r tot"></td></tr>
-     <tr><th>Team on payroll — preparers / Seniors</th>${M.map(x=>`<td class="r ${x.soft?"soft":""}">${x.soft?"existing staff":x.hP+" / "+x.hS}</td>`).join("")}<td class="r tot">today ${num((S.team||{}).prep)} / ${num((S.team||{}).sen)}</td></tr>
+     <tr><th>Team on payroll — preparers / Seniors</th>${M.map(x=>`<td class="r ${x.soft?"soft":""}">${x.soft?"existing staff":x.hP+" / "+x.hS}</td>`).join("")}<td class="r tot" title="Team in Settings today">Current team:<small>${num((S.team||{}).prep)} preparer${num((S.team||{}).prep)===1?"":"s"}, ${num((S.team||{}).sen)} Senior${num((S.team||{}).sen)===1?"":"s"}</small></td></tr>
     </tbody></table></div>
     <p class="note">Hours = review and filing time for each filing plus ${num(pf.auto.clientHrs)} hour${num(pf.auto.clientHrs)===1?"":"s"} per compliance client a month, plus ${pct(num(pf.auto.overhead)).replace(".0","")} for data exceptions, RRC rejections and client contact. Labor = hours × loaded cost (${money(R.rate,2)} an hour blended: one year's cost from Settings — ${money(capP)} preparer, ${money(capS)} Senior — over ${num(pf.auto.fteHours).toLocaleString("en-US")} productive hours, with Seniors doing the ${pct(num(S.subrs)).replace(".0","")} second review). FTE = hours × 12 ÷ ${num(pf.auto.fteHours).toLocaleString("en-US")}. <b>Direct labor in the P&amp;L is team payroll:</b> during the soft launch existing staff cover the work (charged at the cost of the hours); from February at least ${num(pf.auto.minPrep)} preparer and ${num(pf.auto.minSen)} Senior are on payroll, and another person is added when the work passes 1.1 FTE per person.</p></section>
    <section class="panel"><h3>What we need to sell each month <span class="hint">Units to sell and the sales dollars they bring in; new compliance clients drive the plan — edit any month</span></h3>
